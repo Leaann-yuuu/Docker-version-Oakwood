@@ -1,0 +1,158 @@
+<?php
+
+namespace App\Models;
+
+// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+
+class User extends Authenticatable
+{
+    /** @use HasFactory<UserFactory> */
+    use HasFactory, Notifiable, HasApiTokens;
+
+    protected $table = 'tbl_users';
+    protected $primaryKey = 'user_id';
+     /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
+    protected $fillable = [
+        'role',
+        'profile_picture',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'suffix_name',
+        'gender_id',
+        'birth_date',
+        'age',
+        'username',
+        'email',
+        'password',
+        'contact_number',
+        'address',
+        'plate_number',
+        'car_model',
+        'car_color',
+        'is_deleted',
+        'is_approved',
+    ];
+
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'password',
+    ];
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'password' => 'hashed',
+            'is_approved' => 'boolean',
+        ];
+    }
+
+    public function gender(): BelongsTo
+    {
+        return $this->belongsTo(Gender::class, 'gender_id', 'gender_id');
+    }
+
+    public function gateLogs(): HasMany
+    {
+        return $this->hasMany(GateLog::class, 'user_id', 'user_id');
+    }
+
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(Notification::class, 'user_id', 'user_id');
+    }
+
+    public function updateRequests(): HasMany
+    {
+        return $this->hasMany(UpdateRequest::class, 'user_id', 'user_id');
+    }
+
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class, 'user_id', 'user_id')->orderByDesc('is_primary')->orderBy('vehicle_id');
+    }
+
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class, 'user_id', 'user_id');
+    }
+
+    public function visitorRequests(): HasMany
+    {
+        return $this->hasMany(VisitorRequest::class, 'resident_id', 'user_id');
+    }
+
+    public function guardVisitorRequests(): HasMany
+    {
+        return $this->hasMany(VisitorRequest::class, 'guard_id', 'user_id');
+    }
+
+    public function getOwnerNameAttribute(): string
+    {
+        $name = trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+
+        return $name ?: 'Unknown';
+    }
+
+    public function getProfilePictureAttribute($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+
+        $path = ltrim($value, '/');
+        if (str_starts_with($path, 'storage/')) {
+            return url($path);
+        }
+
+        if (str_starts_with($path, 'public/')) {
+            $path = preg_replace('/^public\//', '', $path);
+        }
+
+        return url('storage/' . $path);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isSecurityGuard(): bool
+    {
+        return $this->role === 'security_guard' || $this->role === 'guard';
+    }
+
+    public function isResident(): bool
+    {
+        return $this->role === 'resident';
+    }
+
+    public function isStaff(): bool
+    {
+        return $this->isAdmin() || $this->isSecurityGuard();
+    }
+}

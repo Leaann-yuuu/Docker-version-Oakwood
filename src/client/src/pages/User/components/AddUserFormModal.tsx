@@ -1,0 +1,234 @@
+import { useEffect, useState, type FC, type FormEvent } from "react";
+import FloatingLabelInput from "../../../components/Input/FloatingLabelInput";
+import Modal from "../../../components/Modal";
+import FloatingLabelSelect from "../../../components/Select/FloatingLabelSelect";
+import SubmitButton from "../../../components/Button/SubmitButton";
+import CloseButton from "../../../components/Button/CloseButton";
+import GenderService from "../../../services/GenderService";
+import UserService from "../../../services/UserService";
+import axios from "axios";
+import type { GenderColumns } from "../../../interfaces/GenderInterface";
+import type { UserFieldErrors } from "../../../interfaces/UserInterface";
+import UploadInput from "../../../components/Input/UploadInput";
+
+
+
+interface AddUserFormModalProps {
+    onUserAdded: (message: string) => void;
+    refreshKey: () => void
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+
+
+const AddUserFormModal: FC<AddUserFormModalProps> = ({ onUserAdded, refreshKey, isOpen, onClose }) => {
+    const [loadingGenders, setLoadingGenders] = useState(false);
+    const [genders, setGenders] = useState<GenderColumns[]>([]);
+
+    const [loadingStore, setLoadingStore] = useState(false);
+    const [addUserProfilePicture, setAddUserProfilePicture] = useState<File | null>(null)
+    const [firstName, setFirstName] = useState("");
+    const [middleName, setMiddleName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [suffixName, setSuffixName] = useState("");
+    const [gender, setGender] = useState("");
+    const [birthdate, setBirthDate] = useState("");
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [passwordConfirmation, setPasswordConfirmation] = useState("");
+    const [errors, setErrors] = useState<UserFieldErrors>({});
+
+    const clearFieldError = (field: keyof UserFieldErrors) => {
+        setErrors((prev) => {
+            if (prev[field] === undefined) return prev;
+            const next = { ...prev };
+            delete next[field];
+            return next;
+        });
+    };
+
+    const validateRequiredFields = (): UserFieldErrors => {
+        const validationErrors: UserFieldErrors = {};
+
+        if (!firstName.trim()) validationErrors.first_name = ["The first name field is required."];
+        if (!middleName.trim()) validationErrors.middle_name = ["The middle name field is required."];
+        if (!lastName.trim()) validationErrors.last_name = ["The last name field is required."];
+        if (!suffixName.trim()) validationErrors.suffix_name = ["The suffix name field is required."];
+        if (!gender) validationErrors.gender = ["The gender field is required."];
+        if (!birthdate) validationErrors.birth_date = ["The birth date field is required."];
+        if (!username.trim()) validationErrors.username = ["The username field is required."];
+        if (!password) validationErrors.password = ["The password field is required."];
+        if (!passwordConfirmation) validationErrors.password_confirmation = ["The password confirmation field is required."];
+
+        return validationErrors;
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setFirstName("");
+        setMiddleName("");
+        setLastName("");
+        setSuffixName("");
+        setGender("");
+        setBirthDate("");
+        setUsername("");
+        setPassword("");
+        setPasswordConfirmation("");
+        setAddUserProfilePicture(null);
+        setErrors({});
+    }, [isOpen]);
+
+    const handleStoreUser = async (e: FormEvent) => {
+        try {
+            e.preventDefault();
+            const validationErrors = validateRequiredFields();
+            if (Object.keys(validationErrors).length > 0) {
+                setErrors(validationErrors);
+                return;
+            }
+
+            setLoadingStore(true);
+
+             const formData = new FormData();
+
+            if (addUserProfilePicture) {
+                formData.append("add_user_profile_picture", addUserProfilePicture);
+            }
+
+            formData.append("first_name", firstName);
+            formData.append("middle_name", middleName || "");
+            formData.append("last_name", lastName);
+            formData.append("suffix_name", suffixName || "");
+            formData.append("gender", gender);
+            formData.append("birth_date", birthdate);
+            formData.append("username", username);
+            formData.append("password", password);
+            formData.append("password_confirmation", passwordConfirmation);
+
+            
+
+            const res = await UserService.storeUser(formData);
+
+            if (res.status === 200) {
+
+                setFirstName("");
+                setMiddleName("");
+                setLastName("");
+                setSuffixName("");
+                setGender("");
+                setBirthDate("");
+                setUsername("");
+                setPassword("");
+                setPasswordConfirmation("");
+                setAddUserProfilePicture(null);
+                setErrors({});
+
+                onUserAdded(res.data.message);
+                handleLoadGenders();
+                refreshKey();
+            } else {
+                console.error("Unexpected status error occurred during adding user:", res.status);
+            }
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 422) {
+                setErrors(error.response.data.errors);
+            } else {
+                console.error("Unexpected server error occurred during adding user:", error);
+            }
+        } finally {
+            setLoadingStore(false);
+        }
+    };
+
+    const handleLoadGenders = async () => {
+        try {
+            setLoadingGenders(true);
+
+            const res = await GenderService.loadGenders();
+
+            if (res.status === 200) {
+                setGenders(res.data.genders);
+            } else {
+                console.error("Unexpected error status occurred during loading genders:", res.status);
+            }
+        } catch (error) {
+            console.error("Unexpected server error occurred during loading genders:", error);
+        } finally {
+            setLoadingGenders(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            handleLoadGenders();
+        }
+
+    }, [isOpen]);
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} showCloseButton>
+            <form onSubmit={handleStoreUser} noValidate>
+                <h1 className="text-2xl border-b border-gray-100 p-4 font-semibold mb-4">
+                    Add User Form
+                </h1>
+                 <div className="mb-4">
+                    <UploadInput label="Profile Picture" name="add_user_profile_picture" value={addUserProfilePicture} onChange={setAddUserProfilePicture} errors={errors.add_user_profile_picture}/>
+                 </div>
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 mb-4">
+                    <div className="col-span-2 md:col-span-1">
+                        <div className="mb-4">
+                            <FloatingLabelInput label="First Name" type="text" name="first_name" value={firstName} onChange={(e) => { setFirstName(e.target.value); clearFieldError("first_name"); }} required autoFocus errors={errors.first_name} />
+                        </div>
+                        <div className="mb-4">
+                            <FloatingLabelInput label="Middle Name" type="text" name="middle_name" value={middleName} onChange={(e) => { setMiddleName(e.target.value); clearFieldError("middle_name"); }} required errors={errors.middle_name} />
+                        </div>
+                        <div className="mb-4">
+                            <FloatingLabelInput label="Last Name" type="text" name="last_name" value={lastName} onChange={(e) => { setLastName(e.target.value); clearFieldError("last_name"); }} required errors={errors.last_name} />
+                        </div>
+                        <div className="mb-4">
+                            <FloatingLabelInput label="Suffix Name" type="text" name="suffix_name" value={suffixName} onChange={(e) => { setSuffixName(e.target.value); clearFieldError("suffix_name"); }} required errors={errors.suffix_name} />
+                        </div>
+                        <div className="mb-4">
+                            <FloatingLabelSelect label="Gender" name="gender" value={gender} onChange={(e) => { setGender(e.target.value); clearFieldError("gender"); }} required errors={errors.gender}>
+                                <option value="">Select Gender</option>
+                                {loadingGenders ? (
+                                    <option value="">Loading...</option>
+                                ) : (
+                                    <>
+                                        {genders.map((gender, index) => (
+                                            <option value={gender.gender_id} key={index}>{gender.gender}</option>
+                                        ))}
+                                    </>
+
+                                )}
+                            </FloatingLabelSelect>
+                        </div>
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
+                        <div className="mb-4">
+                            <FloatingLabelInput label="Birth Date" type="date" name="birth_date" value={birthdate} onChange={(e) => { setBirthDate(e.target.value); clearFieldError("birth_date"); }} required errors={errors.birth_date} />
+                        </div>
+                        <div className="mb-4">
+                            <FloatingLabelInput label="Username" type="text" name="username" value={username} onChange={(e) => { setUsername(e.target.value); clearFieldError("username"); }} required errors={errors.username} />
+                        </div>
+                        <div className="mb-4">
+                            <FloatingLabelInput label="Password" type="password" name="password" value={password} onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }} required errors={errors.password} />
+                        </div>
+                        <div className="mb-4">
+                            <FloatingLabelInput label="Password Confirmation" type="password" name="password_confirmation" value={passwordConfirmation} onChange={(e) => { setPasswordConfirmation(e.target.value); clearFieldError("password_confirmation"); }} required errors={errors.password_confirmation} />
+                        </div>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                    {!loadingStore && (
+                        <CloseButton label="Close" onClose={onClose} />
+                    )}
+                    <SubmitButton label="Save User" loading={loadingStore} loadingLabel="Saving User..." />
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
+export default AddUserFormModal;

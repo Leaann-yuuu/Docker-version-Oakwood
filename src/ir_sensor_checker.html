@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OakWood Gate - IR Sensor Live Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0b0f19;
+      --card-bg: rgba(17, 24, 39, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --green-glow: #10b981;
+      --green-bg: rgba(16, 185, 129, 0.12);
+      --red-glow: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.15);
+      --blue-accent: #3b82f6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b0f19 75%);
+      color: #f1f5f9;
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1050px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #059669, #10b981);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+    }
+
+    .brand-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: #ffffff;
+    }
+
+    .brand-title h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+
+    .brand-title p {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .btn-connect {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+    }
+    .btn-connect:hover {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--card-border);
+      color: #cbd5e1;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+
+    .grid-main {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .grid-main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Big Sensor Status Banner */
+    .status-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 36px 20px;
+      border-radius: 18px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 24px;
+      border: 2px solid transparent;
+    }
+
+    /* CLEAR STATE (0) */
+    .status-hero.clear {
+      background: var(--green-bg);
+      border-color: rgba(16, 185, 129, 0.4);
+      box-shadow: 0 0 50px rgba(16, 185, 129, 0.2) inset, 0 10px 30px rgba(16, 185, 129, 0.15);
+    }
+
+    /* BLOCKED STATE (1) */
+    .status-hero.blocked {
+      background: var(--red-bg);
+      border-color: rgba(239, 68, 68, 0.6);
+      box-shadow: 0 0 60px rgba(239, 68, 68, 0.35) inset, 0 10px 40px rgba(239, 68, 68, 0.3);
+      animation: pulse-danger 1.5s infinite alternate;
+    }
+
+    @keyframes pulse-danger {
+      0% {
+        box-shadow: 0 0 40px rgba(239, 68, 68, 0.25) inset, 0 0 20px rgba(239, 68, 68, 0.2);
+      }
+      100% {
+        box-shadow: 0 0 70px rgba(239, 68, 68, 0.5) inset, 0 0 40px rgba(239, 68, 68, 0.4);
+      }
+    }
+
+    .status-badge-digit {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 72px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .clear .status-badge-digit {
+      color: #10b981;
+      text-shadow: 0 0 24px rgba(16, 185, 129, 0.6);
+    }
+
+    .blocked .status-badge-digit {
+      color: #ef4444;
+      text-shadow: 0 0 28px rgba(239, 68, 68, 0.8);
+    }
+
+    .status-badge-title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .clear .status-badge-title {
+      color: #34d399;
+    }
+
+    .blocked .status-badge-title {
+      color: #f87171;
+    }
+
+    .status-badge-desc {
+      font-size: 14px;
+      font-weight: 500;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Barrier Animation Canvas */
+    .gate-scene {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .scene-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .visualizer-svg {
+      width: 100%;
+      height: 160px;
+      display: block;
+    }
+
+    /* Live Stat Cards */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .stat-pill {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .stat-pill-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .stat-pill-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    /* Right Column: Event Log & Controls */
+    .side-card-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+
+    .status-dot.online {
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+    }
+
+    .status-dot.offline {
+      background: #ef4444;
+    }
+
+    .log-stream {
+      background: #030712;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px;
+      height: 320px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .log-entry {
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.02);
+      border-left: 3px solid #64748b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .log-entry.blocked {
+      border-left-color: #ef4444;
+      background: rgba(239, 68, 68, 0.08);
+      color: #fca5a5;
+    }
+
+    .log-entry.clear {
+      border-left-color: #10b981;
+      background: rgba(16, 185, 129, 0.08);
+      color: #86efac;
+    }
+
+    .log-time {
+      font-size: 10px;
+      color: #64748b;
+    }
+
+    .footer-note {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5zm4 4h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
+        </div>
+        <div class="brand-title">
+          <h1>OakWood Subdivision Gate Control</h1>
+          <p>Active Infrared (IR) Anti-Crush Sensor Monitor</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btnConnect" class="btn-connect" onclick="toggleConnection()">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H4v-2h1V7a5 5 0 0 1 10 0z"/></svg>
+          <span id="connectBtnText">Connect USB (Web Serial)</span>
+        </button>
+        <button class="btn-secondary" id="btnAudio" onclick="toggleAudio()" title="Toggle Mute Alert">
+          🔊 Sound: ON
+        </button>
+        <button class="btn-secondary" onclick="simulateToggle()" title="Test without hardware">
+          ⚡ Simulate
+        </button>
+      </div>
+    </header>
+
+    <div class="grid-main">
+      <!-- Left Column: Main Visualizer & Status -->
+      <div>
+        <div class="card">
+          <!-- Big Status Hero -->
+          <div id="statusHero" class="status-hero clear">
+            <div id="statusDigit" class="status-badge-digit">0</div>
+            <div id="statusTitle" class="status-badge-title">PATH IS CLEAR</div>
+            <div id="statusDesc" class="status-badge-desc">
+              <span id="statusIcon">🟢</span>
+              <span id="statusMessage">No obstacle detected. Gate arm operation is safe.</span>
+            </div>
+          </div>
+
+          <!-- Barrier Gate & Infrared Beam Simulation -->
+          <div class="gate-scene">
+            <div class="scene-header">
+              <span>Interactive Gate & Beam Simulation</span>
+              <span id="beamStatusText" style="color: #10b981;">Beam Active (Unbroken)</span>
+            </div>
+
+            <svg class="visualizer-svg" viewBox="0 0 600 160">
+              <!-- Ground -->
+              <line x1="20" y1="145" x2="580" y2="145" stroke="#334155" stroke-width="4" stroke-dasharray="8 6" />
+
+              <!-- Barrier Housing (Left) -->
+              <rect x="70" y="55" width="36" height="90" rx="4" fill="#1e293b" stroke="#475569" stroke-width="2" />
+              <circle cx="88" cy="72" r="7" fill="#64748b" />
+
+              <!-- Barrier Arm (Rotates) -->
+              <g id="gateArmGroup" style="transform-origin: 88px 72px; transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                <rect x="88" y="67" width="280" height="10" rx="4" fill="#f87171" stroke="#dc2626" stroke-width="1.5" />
+                <!-- White Stripes on barrier arm -->
+                <rect x="130" y="68" width="24" height="8" fill="#ffffff" />
+                <rect x="180" y="68" width="24" height="8" fill="#ffffff" />
+                <rect x="230" y="68" width="24" height="8" fill="#ffffff" />
+                <rect x="280" y="68" width="24" height="8" fill="#ffffff" />
+                <rect x="330" y="68" width="24" height="8" fill="#ffffff" />
+              </g>
+
+              <!-- Infrared Sensor Post (Right) -->
+              <rect x="490" y="80" width="16" height="65" rx="3" fill="#334155" />
+              <circle cx="498" cy="95" r="5" fill="#ef4444" id="sensorEye" />
+
+              <!-- Infrared Beam Line (Invisible laser line across road) -->
+              <line id="irBeamLine" x1="88" y1="95" x2="495" y2="95" stroke="#10b981" stroke-width="3" stroke-dasharray="6 4" opacity="0.8" />
+
+              <!-- Obstacle (Car/Person that appears on Block) -->
+              <g id="obstacleVehicle" style="display: none; transition: all 0.3s ease;">
+                <!-- Car Body -->
+                <rect x="240" y="90" width="130" height="45" rx="10" fill="#3b82f6" stroke="#1d4ed8" stroke-width="2" />
+                <rect x="265" y="65" width="75" height="28" rx="6" fill="#60a5fa" />
+                <!-- Wheels -->
+                <circle cx="270" cy="138" r="12" fill="#0f172a" stroke="#cbd5e1" stroke-width="3" />
+                <circle cx="340" cy="138" r="12" fill="#0f172a" stroke="#cbd5e1" stroke-width="3" />
+                <!-- Warning flash over car -->
+                <text x="305" y="118" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">OBSTACLE</text>
+              </g>
+            </svg>
+          </div>
+
+          <!-- Bottom Stat Pills -->
+          <div class="stats-row">
+            <div class="stat-pill">
+              <div class="stat-pill-label">Sensor Digital Pin</div>
+              <div class="stat-pill-value" style="color: #60a5fa;">PIN D2 / D3</div>
+            </div>
+            <div class="stat-pill">
+              <div class="stat-pill-label">Total Triggers</div>
+              <div class="stat-pill-value" id="statTriggerCount">0</div>
+            </div>
+            <div class="stat-pill">
+              <div class="stat-pill-label">Last Obstacle Duration</div>
+              <div class="stat-pill-value" id="statLastDuration">0.0 s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Live Logs & Telemetry -->
+      <div>
+        <div class="card" style="height: 100%;">
+          <div class="side-card-title">
+            <span>Hardware Connection</span>
+            <span style="font-size: 11px; color: #94a3b8;">9600 Baud</span>
+          </div>
+
+          <div class="connection-status">
+            <div id="connDot" class="status-dot offline"></div>
+            <div style="flex: 1;">
+              <div id="connText" style="font-weight: 600;">Disconnected</div>
+              <div id="connSubText" style="font-size: 10px; color: #64748b;">Click "Connect USB" or start Python bridge</div>
+            </div>
+          </div>
+
+          <div class="side-card-title" style="margin-top: 10px;">
+            <span>Real-time Event Stream</span>
+            <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px;" onclick="clearLogs()">Clear</button>
+          </div>
+
+          <div id="logStream" class="log-stream">
+            <div class="log-entry">
+              <span>Ready. Waiting for IR sensor signals...</span>
+              <span class="log-time">Now</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      OakWood Subdivision Security IoT • Arduino Uno Pin D2/D3 • BTS7960 Barrier Gate Controller
+    </div>
+  </div>
+
+  <script>
+    // State Variables
+    let isBlocked = 0;
+    let triggerCount = 0;
+    let blockStartTime = null;
+    let soundEnabled = true;
+    let port = null;
+    let reader = null;
+    let isReading = false;
+    let audioCtx = null;
+
+    // Elements
+    const hero = document.getElementById('statusHero');
+    const digit = document.getElementById('statusDigit');
+    const title = document.getElementById('statusTitle');
+    const desc = document.getElementById('statusMessage');
+    const icon = document.getElementById('statusIcon');
+    const logStream = document.getElementById('logStream');
+    const triggerCountEl = document.getElementById('statTriggerCount');
+    const lastDurationEl = document.getElementById('statLastDuration');
+    const beamText = document.getElementById('beamStatusText');
+    const irBeamLine = document.getElementById('irBeamLine');
+    const obstacleVehicle = document.getElementById('obstacleVehicle');
+    const gateArm = document.getElementById('gateArmGroup');
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+    const connSubText = document.getElementById('connSubText');
+    const connectBtnText = document.getElementById('connectBtnText');
+
+    // Beep sound generator using Web Audio API
+    function playBeep(isAlert) {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (isAlert) {
+          // Warning tone
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime); // High alert A5
+          osc.type = 'sawtooth';
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.25);
+        } else {
+          // Clear chime
+          osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.2);
+        }
+      } catch (e) {
+        console.warn('Audio error:', e);
+      }
+    }
+
+    function toggleAudio() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('btnAudio').textContent = soundEnabled ? '🔊 Sound: ON' : '🔇 Sound: MUTED';
+    }
+
+    // Update UI when sensor state changes
+    function updateSensorState(newState) {
+      if (newState === isBlocked) return;
+      isBlocked = newState;
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString();
+
+      if (isBlocked === 1) {
+        // TRIGGERED / BLOCKED (1)
+        triggerCount++;
+        triggerCountEl.textContent = triggerCount;
+        blockStartTime = Date.now();
+
+        hero.className = 'status-hero blocked';
+        digit.textContent = '1';
+        title.textContent = 'OBSTACLE DETECTED!';
+        icon.textContent = '🚨';
+        desc.textContent = 'Beam is BROKEN! Gate arm safety lock ACTIVE.';
+
+        // Visual simulation updates
+        beamText.textContent = 'Beam BROKEN! (Obstacle Detected)';
+        beamText.style.color = '#ef4444';
+        irBeamLine.setAttribute('stroke', '#ef4444');
+        obstacleVehicle.style.display = 'block';
+        gateArm.style.transform = 'rotate(-75deg)'; // Raise gate arm to safety!
+
+        playBeep(true);
+        addLogEntry('1 - BLOCKED (Obstacle Detected)', 'blocked', timeStr);
+      } else {
+        // CLEARED (0)
+        let durationStr = '0.0 s';
+        if (blockStartTime) {
+          const duration = ((Date.now() - blockStartTime) / 1000).toFixed(1);
+          durationStr = `${duration} s`;
+          lastDurationEl.textContent = durationStr;
+        }
+
+        hero.className = 'status-hero clear';
+        digit.textContent = '0';
+        title.textContent = 'PATH IS CLEAR';
+        icon.textContent = '🟢';
+        desc.textContent = 'No obstacle detected. Gate arm operation is safe.';
+
+        // Visual simulation updates
+        beamText.textContent = 'Beam Active (Unbroken)';
+        beamText.style.color = '#10b981';
+        irBeamLine.setAttribute('stroke', '#10b981');
+        obstacleVehicle.style.display = 'none';
+        gateArm.style.transform = 'rotate(0deg)'; // Gate arm normal
+
+        playBeep(false);
+        addLogEntry(`0 - CLEAR (Passed after ${durationStr})`, 'clear', timeStr);
+      }
+    }
+
+    function addLogEntry(text, type, time) {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.innerHTML = `<span>${text}</span><span class="log-time">${time}</span>`;
+      logStream.insertBefore(entry, logStream.firstChild);
+    }
+
+    function clearLogs() {
+      logStream.innerHTML = '';
+    }
+
+    function simulateToggle() {
+      updateSensorState(isBlocked === 1 ? 0 : 1);
+    }
+
+    // Web Serial API - Connect directly to Arduino COM port in browser!
+    async function toggleConnection() {
+      if (!('serial' in navigator)) {
+        alert('Web Serial API is supported in Google Chrome, Microsoft Edge, and Opera.\nIf you are on Firefox or Safari, run "python python/test_ir_sensor.py" instead.');
+        return;
+      }
+
+      if (port) {
+        // Disconnect
+        try {
+          if (reader) await reader.cancel();
+          await port.close();
+        } catch (e) {
+          console.error(e);
+        }
+        port = null;
+        setConnectionStatus(false, 'Disconnected', 'Click "Connect USB" to start');
+        return;
+      }
+
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        setConnectionStatus(true, 'Connected (USB COM)', 'Streaming live at 9600 baud');
+        readSerialLoop();
+      } catch (err) {
+        console.error('Serial Connection Error:', err);
+        setConnectionStatus(false, 'Connection Failed', err.message);
+      }
+    }
+
+    async function readSerialLoop() {
+      const textDecoder = new TextDecoderStream();
+      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+      reader = textDecoder.readable.getReader();
+
+      let buffer = '';
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            buffer += value;
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // Keep unfinished line in buffer
+
+            for (const line of lines) {
+              const clean = line.trim();
+              if (clean.startsWith('1')) {
+                updateSensorState(1);
+              } else if (clean.startsWith('0')) {
+                updateSensorState(0);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Reader stopped:', e);
+      } finally {
+        reader.releaseLock();
+      }
+    }
+
+    function setConnectionStatus(online, title, subtitle) {
+      connDot.className = `status-dot ${online ? 'online' : 'offline'}`;
+      connText.textContent = title;
+      connSubText.textContent = subtitle;
+      connectBtnText.textContent = online ? 'Disconnect USB' : 'Connect USB (Web Serial)';
+    }
+
+    // Auto-poll Python local server if active (fallback/complement to Web Serial)
+    async function checkPythonBridge() {
+      if (port) return; // Don't conflict if Web Serial is active
+      try {
+        const res = await fetch('http://127.0.0.1:8080/api/sensor', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          setConnectionStatus(true, 'Connected (Python Bridge)', 'Reading COM5 via Python');
+          updateSensorState(data.status);
+        }
+      } catch (e) {
+        // Python server not running, that's okay!
+      }
+    }
+
+    setInterval(checkPythonBridge, 500);
+  </script>
+</body>
+</html>
+
