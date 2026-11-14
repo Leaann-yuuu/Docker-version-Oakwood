@@ -358,7 +358,7 @@ class AuthController extends Controller
         return response()->json(['message' => 'If an account exists with that email, a new password has been sent.'], 200);
     }
 
-    private function createAdminApprovalNotification(User $user, string $plainPassword)
+    private function createAdminApprovalNotification(User $user, string $plainPassword, array $extra = [])
     {
         $admins = User::where('role', 'admin')
             ->where('is_deleted', false)
@@ -371,14 +371,18 @@ class AuthController extends Controller
             }
         }
 
-        $payload = json_encode([
+        $payload = json_encode(array_merge([
             'target_user_id' => $user->user_id,
             'username' => $user->username,
             'plain_password' => $plainPassword,
             'email' => $user->email,
             'name' => "{$user->first_name} {$user->last_name}",
             'role' => $user->role,
-        ]);
+            'contact_number' => $user->contact_number,
+            'birth_date' => $user->birth_date,
+            'vehicle_type' => $user->car_model,
+            'plate_number' => $user->plate_number,
+        ], $extra));
 
         foreach ($admins as $admin) {
             \App\Models\Notification::create([
@@ -478,8 +482,12 @@ class AuthController extends Controller
             'contact_number' => ['required', 'string', 'regex:/^[0-9]{11}$/'],
             'address' => ['nullable', 'max:255'],
             'plate_number' => ['nullable', 'max:20', Rule::unique('tbl_users', 'plate_number')],
+            'vehicle_type' => ['nullable', 'max:55'],
             'car_model' => ['nullable', 'max:55'],
             'car_color' => ['nullable', 'max:55'],
+            'or_cr_image' => ['nullable', 'file', 'image', 'max:10240'],
+            'valid_id_image' => ['nullable', 'file', 'image', 'max:10240'],
+            'license_image' => ['nullable', 'file', 'image', 'max:10240'],
         ]);
 
         [$username, $plainPassword] = $this->resolveCredentials($validated);
@@ -492,6 +500,11 @@ class AuthController extends Controller
             $file->storeAs('img/user/profile_picture', $filename, 'public');
             $profilePicture = 'img/user/profile_picture/' . $filename;
         }
+
+        $vehicleType = $validated['vehicle_type'] ?? $validated['car_model'] ?? null;
+        $plateNumber = !empty($validated['plate_number'])
+            ? strtoupper(trim($validated['plate_number']))
+            : null;
 
         $user = User::create([
             'role' => 'resident',
@@ -508,15 +521,62 @@ class AuthController extends Controller
             'is_deleted' => false,
             'contact_number' => $validated['contact_number'] ?? null,
             'address' => $validated['address'] ?? null,
-            'plate_number' => !empty($validated['plate_number'])
-                ? strtoupper($validated['plate_number'])
-                : null,
-            'car_model' => $validated['car_model'] ?? null,
+            'plate_number' => $plateNumber,
+            'car_model' => $vehicleType,
             'car_color' => $validated['car_color'] ?? null,
             'is_approved' => false,
         ]);
 
-        $this->createAdminApprovalNotification($user, $plainPassword);
+        // Store OR/CR document image if uploaded
+        $orCrPath = null;
+        $orCrUrl = null;
+        if ($request->hasFile('or_cr_image')) {
+            $file = $request->file('or_cr_image');
+            $filename = 'or_cr_' . $user->user_id . '_' . time() . '.' . ($file->getClientOriginalExtension() ?: 'jpg');
+            $file->storeAs('img/vehicles/or_cr', $filename, 'public');
+            $orCrPath = 'img/vehicles/or_cr/' . $filename;
+            $orCrUrl = '/api/resident-documents/or_cr/' . $filename;
+        }
+
+        // Store Valid ID / License image if uploaded
+        $idImagePath = null;
+        $idImageUrl = null;
+        if ($request->hasFile('valid_id_image') || $request->hasFile('license_image')) {
+            $file = $request->file('valid_id_image') ?? $request->file('license_image');
+            $filename = 'id_' . $user->user_id . '_' . time() . '.' . ($file->getClientOriginalExtension() ?: 'jpg');
+            $file->storeAs('img/vehicles/license', $filename, 'public');
+            $idImagePath = 'img/vehicles/license/' . $filename;
+            $idImageUrl = '/api/resident-documents/license/' . $filename;
+        }
+
+        // If a single 2-in-1 verification photo was uploaded, mirror it across both fields
+        if ($orCrPath && !$idImagePath) {
+            $idImagePath = $orCrPath;
+            $idImageUrl = $orCrUrl;
+        } elseif ($idImagePath && !$orCrPath) {
+            $orCrPath = $idImagePath;
+            $orCrUrl = $idImageUrl;
+        }
+
+        if ($plateNumber || $vehicleType || $orCrPath || $idImagePath) {
+            \App\Models\Vehicle::create([
+                'user_id' => $user->user_id,
+                'plate_number' => $plateNumber ?: 'N/A',
+                'car_model' => $vehicleType ?: 'Unspecified',
+                'car_color' => $validated['car_color'] ?? 'N/A',
+                'is_primary' => true,
+                'or_cr_image' => $orCrPath,
+                'license_image' => $idImagePath,
+                'status' => 'pending',
+            ]);
+        }
+
+        $this->createAdminApprovalNotification($user, $plainPassword, [
+            'vehicle_type' => $vehicleType,
+            'plate_number' => $plateNumber,
+            'or_cr_image' => $orCrUrl,
+            'valid_id_image' => $idImageUrl,
+        ]);
 
         return $this->registrationResponse(
             $user,

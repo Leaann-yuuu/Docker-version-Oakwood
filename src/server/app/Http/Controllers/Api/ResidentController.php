@@ -159,16 +159,27 @@ class ResidentController extends Controller
 
         if (!empty($validated['vehicles']) && is_array($validated['vehicles'])) {
             $vehicles = array_slice($validated['vehicles'], 0, 10);
+            $existingVehicles = $resident->vehicles()->get();
+            $defaultOrCr = $existingVehicles->firstWhere('or_cr_image', '!=', null)?->or_cr_image;
+            $defaultLicense = $existingVehicles->firstWhere('license_image', '!=', null)?->license_image;
+
             $resident->vehicles()->delete();
             $primaryVehicle = null;
 
             foreach ($vehicles as $idx => $v) {
                 $isPrimary = !empty($v['is_primary']) || ($idx === 0 && !collect($vehicles)->contains('is_primary', true));
+                $normalizedPlate = strtoupper(trim($v['plate_number']));
+                $matchedExisting = $existingVehicles->firstWhere('plate_number', $normalizedPlate)
+                    ?? ($idx === 0 ? $existingVehicles->first() : null);
+
                 $created = $resident->vehicles()->create([
-                    'plate_number' => strtoupper(trim($v['plate_number'])),
+                    'plate_number' => $normalizedPlate,
                     'car_model' => trim($v['car_model']),
                     'car_color' => trim($v['car_color']),
                     'is_primary' => $isPrimary,
+                    'or_cr_image' => $v['or_cr_image'] ?? $matchedExisting?->or_cr_image ?? ($isPrimary ? $defaultOrCr : null),
+                    'license_image' => $v['license_image'] ?? $matchedExisting?->license_image ?? ($isPrimary ? $defaultLicense : null),
+                    'status' => $matchedExisting?->status ?? 'approved',
                 ]);
 
                 if ($isPrimary && !$primaryVehicle) {
@@ -348,5 +359,35 @@ class ResidentController extends Controller
             'vehicle' => $vehicle,
             'user' => $user->fresh()->load(['gender', 'vehicles']),
         ], 201);
+    }
+
+    public function getDocumentImage(string $type, string $filename)
+    {
+        $safeName = basename($filename);
+        if (empty($safeName)) {
+            abort(404, 'Document not found.');
+        }
+
+        $folder = in_array($type, ['or_cr', 'orcr'], true) ? 'or_cr' : 'license';
+
+        $candidates = [
+            storage_path("app/public/img/vehicles/{$folder}/{$safeName}"),
+            storage_path("app/private/public/img/vehicles/{$folder}/{$safeName}"),
+            public_path("storage/img/vehicles/{$folder}/{$safeName}"),
+            public_path("img/vehicles/{$folder}/{$safeName}"),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (file_exists($candidate) && is_file($candidate)) {
+                $mime = mime_content_type($candidate) ?: 'image/jpeg';
+                return response()->file($candidate, [
+                    'Content-Type' => $mime,
+                    'Cache-Control' => 'public, max-age=86400',
+                    'Access-Control-Allow-Origin' => '*',
+                ]);
+            }
+        }
+
+        abort(404, 'Document not found.');
     }
 }

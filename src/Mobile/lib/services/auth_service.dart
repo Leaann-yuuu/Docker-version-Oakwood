@@ -101,19 +101,49 @@ class AuthService {
   Future<Map<String, dynamic>> registerResident(
     Map<String, dynamic> payload, {
     String? imagePath,
+    String? orCrImagePath,
+    String? validIdImagePath,
   }) async {
     dynamic body;
-    if (imagePath != null && imagePath.isNotEmpty) {
+    final hasFiles = (imagePath != null && imagePath.isNotEmpty) ||
+        (orCrImagePath != null && orCrImagePath.isNotEmpty) ||
+        (validIdImagePath != null && validIdImagePath.isNotEmpty);
+
+    if (hasFiles) {
       final formData = FormData.fromMap(payload);
-      formData.files.add(
-        MapEntry(
-          'profile_picture',
-          await MultipartFile.fromFile(
-            imagePath,
-            filename: imagePath.split('/').last,
+      if (imagePath != null && imagePath.isNotEmpty) {
+        formData.files.add(
+          MapEntry(
+            'profile_picture',
+            await MultipartFile.fromFile(
+              imagePath,
+              filename: imagePath.split(RegExp(r'[/\\]')).last,
+            ),
           ),
-        ),
-      );
+        );
+      }
+      if (orCrImagePath != null && orCrImagePath.isNotEmpty) {
+        formData.files.add(
+          MapEntry(
+            'or_cr_image',
+            await MultipartFile.fromFile(
+              orCrImagePath,
+              filename: orCrImagePath.split(RegExp(r'[/\\]')).last,
+            ),
+          ),
+        );
+      }
+      if (validIdImagePath != null && validIdImagePath.isNotEmpty) {
+        formData.files.add(
+          MapEntry(
+            'valid_id_image',
+            await MultipartFile.fromFile(
+              validIdImagePath,
+              filename: validIdImagePath.split(RegExp(r'[/\\]')).last,
+            ),
+          ),
+        );
+      }
       body = formData;
     } else {
       body = payload;

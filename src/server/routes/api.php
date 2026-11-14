@@ -31,6 +31,7 @@ Route::post('/gate/verify', [GateController::class, 'verify']);
 Route::get('/gate/authorized-plates', [GateController::class, 'authorizedPlates']);
 Route::get('/gate/camera-stream-proxy', [GateController::class, 'cameraStreamProxy']);
 Route::get('/gate/captures/{filename}', [GateController::class, 'getCaptureImage']);
+Route::get('/resident-documents/{type}/{filename}', [ResidentController::class, 'getDocumentImage']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::controller(AuthController::class)->prefix('/auth')->group(function () {

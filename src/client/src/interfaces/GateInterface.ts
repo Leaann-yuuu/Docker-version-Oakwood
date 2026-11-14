@@ -22,6 +22,9 @@ export interface GateUser {
         car_model: string;
         car_color: string;
         is_primary?: boolean;
+        or_cr_image?: string | null;
+        license_image?: string | null;
+        status?: string | null;
     }>;
 }
 

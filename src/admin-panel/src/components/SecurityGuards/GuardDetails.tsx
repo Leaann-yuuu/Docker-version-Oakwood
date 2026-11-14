@@ -7,6 +7,22 @@ import { formatDateShort } from '../../utils/formatDate'
 import { useModalAnimation } from '../../hooks/useModalAnimation'
 import GuardActivityLogs from './GuardActivityLogs'
 
+const BACKEND_ORIGIN = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8080/api').replace(/\/api\/?$/, '')
+
+const resolveDocumentUrl = (path?: string | null): string | null => {
+  if (!path) return null
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  if (path.startsWith('/api/')) return `${BACKEND_ORIGIN}${path}`
+  const clean = path.replace(/^\/+/, '')
+  if (clean.startsWith('img/vehicles/or_cr/')) {
+    return `${BACKEND_ORIGIN}/api/resident-documents/or_cr/${clean.split('/').pop()}`
+  }
+  if (clean.startsWith('img/vehicles/license/')) {
+    return `${BACKEND_ORIGIN}/api/resident-documents/license/${clean.split('/').pop()}`
+  }
+  return `${BACKEND_ORIGIN}/storage/${clean}`
+}
+
 interface GuardDetailsProps {
   isOpen: boolean
   user: GuardUser | null
@@ -54,6 +70,14 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
   const [error, setError] = useState('')
   const [genders, setGenders] = useState<{ gender_id: number; gender: string }[]>([])
   const [vehicles, setVehicles] = useState<VehicleInfo[]>([])
+  const [previewDoc, setPreviewDoc] = useState<{
+    residentName: string
+    activeTab: 'or_cr' | 'valid_id' | 'both'
+    orCrUrl: string | null
+    validIdUrl: string | null
+    vehicleType?: string | null
+    plateNumber?: string | null
+  } | null>(null)
 
   const [form, setForm] = useState({
     first_name: '',
@@ -100,6 +124,9 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
             car_model: v.car_model || '',
             car_color: v.car_color || '',
             is_primary: Boolean(v.is_primary),
+            or_cr_image: v.or_cr_image ?? null,
+            license_image: v.license_image ?? null,
+            status: v.status ?? null,
           }))
         : user.plate_number
           ? [
@@ -309,6 +336,20 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
   if (!shouldRender || !user) return null
 
   const isResident = user.role === 'resident'
+  const primaryVeh = displayVehicles.find((v) => v.is_primary) || displayVehicles[0]
+  const primaryOrCrUrl = resolveDocumentUrl(primaryVeh?.or_cr_image)
+  const primaryValidIdUrl = resolveDocumentUrl(primaryVeh?.license_image)
+  const openResidentDocs = (tab: 'or_cr' | 'valid_id' | 'both', veh?: VehicleInfo) => {
+    const targetVeh = veh || primaryVeh
+    setPreviewDoc({
+      residentName: userFullName(user),
+      activeTab: tab,
+      orCrUrl: resolveDocumentUrl(targetVeh?.or_cr_image),
+      validIdUrl: resolveDocumentUrl(targetVeh?.license_image),
+      vehicleType: targetVeh?.car_model || user.car_model,
+      plateNumber: targetVeh?.plate_number || user.plate_number,
+    })
+  }
 
   return createPortal(
     <div className={`fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 transition-opacity ${isAnimatingOut ? 'opacity-0' : 'opacity-100'}`} onClick={onClose}>
@@ -325,6 +366,19 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
           <div className="flex items-center gap-2">
             {!isEditing && !isDeleting && (
               <>
+                {isResident && (
+                  <button
+                    type="button"
+                    onClick={() => openResidentDocs('both')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/15 px-3.5 py-1.5 text-xs font-semibold text-indigo-300 transition hover:bg-indigo-500/25 cursor-pointer"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    View OR/CR &amp; ID
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleStartEdit}
@@ -418,59 +472,59 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">First Name</label>
+                  <label className="block text-xs font-semibold text-zinc-300">First Name</label>
                   <input
                     type="text"
                     required
                     value={form.first_name}
                     onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Middle Name</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Middle Name</label>
                   <input
                     type="text"
                     value={form.middle_name}
                     onChange={(e) => setForm({ ...form, middle_name: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Last Name</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Last Name</label>
                   <input
                     type="text"
                     required
                     value={form.last_name}
                     onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                   />
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Username</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Username</label>
                   <input
                     type="text"
                     required
                     value={form.username}
                     onChange={(e) => setForm({ ...form, username: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Email</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Email</label>
                   <input
                     type="email"
                     required={isResident}
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Contact Number</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Contact Number</label>
                   <input
                     type="text"
                     required={isResident}
@@ -479,55 +533,55 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
                     maxLength={11}
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Date of Birth</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Date of Birth</label>
                   <input
                     type="date"
                     required
                     value={form.birth_date}
                     onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 [color-scheme:dark]"
                   />
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Gender</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Gender</label>
                   <select
                     value={form.gender}
                     onChange={(e) => setForm({ ...form, gender: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                   >
-                    <option value="">Select Gender</option>
+                    <option value="" className="bg-zinc-900 text-zinc-400">Select Gender</option>
                     {genders.length > 0 ? (
                       genders.map((g) => (
-                        <option key={g.gender_id} value={g.gender_id}>
+                        <option key={g.gender_id} value={g.gender_id} className="bg-zinc-900 text-zinc-100">
                           {g.gender}
                         </option>
                       ))
                     ) : (
                       <>
-                        <option value="1">Male</option>
-                        <option value="2">Female</option>
-                        <option value="3">Prefer Not to Say</option>
+                        <option value="1" className="bg-zinc-900 text-zinc-100">Male</option>
+                        <option value="2" className="bg-zinc-900 text-zinc-100">Female</option>
+                        <option value="3" className="bg-zinc-900 text-zinc-100">Prefer Not to Say</option>
                       </>
                     )}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Address</label>
+                  <label className="block text-xs font-semibold text-zinc-300">Address</label>
                   <input
                     type="text"
                     required
                     placeholder="Enter complete address..."
                     value={form.address}
                     onChange={(e) => setForm({ ...form, address: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 placeholder:text-zinc-500"
                   />
                 </div>
               </div>
@@ -626,7 +680,7 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
 
                         <div className="grid gap-3 sm:grid-cols-3">
                           <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300">
                               Plate Number <span className="text-rose-500">*</span>
                             </label>
                             <input
@@ -635,12 +689,12 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
                               placeholder="e.g. ABC1234"
                               value={veh.plate_number}
                               onChange={(e) => handleVehicleChange(idx, 'plate_number', e.target.value)}
-                              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 font-mono text-sm font-bold uppercase tracking-wider text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 placeholder:font-normal placeholder:tracking-normal"
+                              className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 font-mono text-sm font-bold uppercase tracking-wider text-zinc-100 placeholder:text-zinc-500 placeholder:font-normal placeholder:tracking-normal outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300">
                               Vehicle Model <span className="text-rose-500">*</span>
                             </label>
                             <input
@@ -649,12 +703,12 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
                               placeholder="e.g. Toyota Vios"
                               value={veh.car_model}
                               onChange={(e) => handleVehicleChange(idx, 'car_model', e.target.value)}
-                              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+                              className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-300">
                               Vehicle Color <span className="text-rose-500">*</span>
                             </label>
                             <input
@@ -663,7 +717,7 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
                               placeholder="e.g. Pearl White"
                               value={veh.car_color}
                               onChange={(e) => handleVehicleChange(idx, 'car_color', e.target.value)}
-                              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 dark:border-white/10 dark:bg-[#121212] dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+                              className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-900/90 px-3.5 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
                             />
                           </div>
                         </div>
@@ -690,6 +744,43 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
                 <Detail label="Contact Number" value={user.contact_number ?? 'N/A'} />
                 <Detail label="Age" value={String(user.age ?? 'N/A')} />
                 <Detail label="Address" value={user.address ?? 'N/A'} />
+                {isResident && (
+                  <>
+                    <Detail
+                      label="Vehicle Type"
+                      value={primaryVeh?.car_model || user.car_model || 'Not provided'}
+                    />
+                    <Detail
+                      label="Primary Plate Number"
+                      value={primaryVeh?.plate_number || user.plate_number || 'Not provided'}
+                    />
+                    <div className="rounded-lg border border-white/5 bg-black/25 p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Valid ID & OR/CR (Verification)</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openResidentDocs('both')}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-indigo-400/30 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/25 transition cursor-pointer"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          View Valid ID & OR/CR
+                        </button>
+                        {primaryOrCrUrl || primaryValidIdUrl ? (
+                          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                            Uploaded
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                            No file
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {isResident && (
@@ -741,13 +832,23 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
 
                           <div className="mt-4 grid grid-cols-2 gap-2 text-xs border-t border-white/5 pt-3">
                             <div>
-                              <p className="text-[10px] font-semibold uppercase text-zinc-500 tracking-wider">Model</p>
+                              <p className="text-[10px] font-semibold uppercase text-zinc-500 tracking-wider">Vehicle Type / Model</p>
                               <p className="mt-0.5 font-medium text-zinc-200 truncate">{veh.car_model || 'N/A'}</p>
                             </div>
                             <div>
                               <p className="text-[10px] font-semibold uppercase text-zinc-500 tracking-wider">Color</p>
                               <p className="mt-0.5 font-medium text-zinc-200 truncate">{veh.car_color || 'N/A'}</p>
                             </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
+                            <button
+                              type="button"
+                              onClick={() => openResidentDocs('both', veh)}
+                              className="inline-flex items-center gap-1 rounded-md border border-indigo-400/30 bg-indigo-500/15 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 hover:bg-indigo-500/25 transition cursor-pointer"
+                            >
+                              View Valid ID & OR/CR
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -763,6 +864,135 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
           )}
         </div>
       </div>
+
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+          onClick={(e) => {
+            e.stopPropagation()
+            setPreviewDoc(null)
+          }}
+        >
+          <div
+            className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-white/15 bg-zinc-900 p-5 shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {previewDoc.residentName} — Valid ID & OR/CR Verification
+                </h3>
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  Vehicle Type: <span className="font-semibold text-zinc-200">{previewDoc.vehicleType || 'Not provided'}</span>
+                  {' • '}
+                  Plate Number: <span className="font-mono font-semibold text-emerald-400">{previewDoc.plateNumber || 'Not provided'}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white transition cursor-pointer"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 overflow-y-auto pr-1 md:grid-cols-2">
+              <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      Valid ID (Resident Verification)
+                    </span>
+                    {previewDoc.validIdUrl ? (
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        Uploaded
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                        Not Uploaded
+                      </span>
+                    )}
+                  </div>
+                  {previewDoc.validIdUrl && (
+                    <a
+                      href={previewDoc.validIdUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                    >
+                      Open Full Image
+                    </a>
+                  )}
+                </div>
+                {previewDoc.validIdUrl ? (
+                  <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                    <img
+                      src={previewDoc.validIdUrl}
+                      alt="Valid ID Document"
+                      className="max-h-[60vh] w-auto rounded-lg object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+                    <p className="text-sm font-semibold text-zinc-300">No Valid ID Uploaded</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      This resident has not uploaded a Valid ID photo yet.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      Vehicle OR/CR Document
+                    </span>
+                    {previewDoc.orCrUrl ? (
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        Uploaded
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                        Not Uploaded
+                      </span>
+                    )}
+                  </div>
+                  {previewDoc.orCrUrl && (
+                    <a
+                      href={previewDoc.orCrUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                    >
+                      Open Full Image
+                    </a>
+                  )}
+                </div>
+                {previewDoc.orCrUrl ? (
+                  <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                    <img
+                      src={previewDoc.orCrUrl}
+                      alt="Vehicle OR/CR Document"
+                      className="max-h-[60vh] w-auto rounded-lg object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+                    <p className="text-sm font-semibold text-zinc-300">No OR/CR Uploaded</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      This resident has not uploaded a Vehicle OR/CR photo yet.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   )

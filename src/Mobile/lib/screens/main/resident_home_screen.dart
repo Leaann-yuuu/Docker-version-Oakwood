@@ -461,9 +461,18 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
     }
   }
 
+  DateTime _parseToPhilippineTime(String iso) {
+    final parsed = DateTime.parse(iso.trim());
+    if (parsed.isUtc) {
+      // Convert UTC to Philippine Standard Time (UTC+8)
+      return parsed.add(const Duration(hours: 8));
+    }
+    return parsed;
+  }
+
   String _formatDate(String iso) {
     try {
-      final dt = DateTime.parse(iso).toLocal();
+      final dt = _parseToPhilippineTime(iso);
       final months = [
         'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -473,6 +482,52 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
       final ampm = dt.hour >= 12 ? 'PM' : 'AM';
       final minStr = dt.minute.toString().padLeft(2, '0');
       return '$monthStr ${dt.day}, ${dt.year} at $hour:$minStr $ampm';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  String _formatPhilippineTime(String iso) {
+    if (iso.trim().isEmpty) return 'No time';
+    try {
+      final dt = _parseToPhilippineTime(iso);
+      final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      final minStr = dt.minute.toString().padLeft(2, '0');
+      return '$hour:$minStr $ampm';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  String _formatPhilippineDate(String iso) {
+    if (iso.trim().isEmpty) return 'No date';
+    try {
+      final dt = _parseToPhilippineTime(iso);
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final monthStr = months[dt.month - 1];
+      return '$monthStr ${dt.day}, ${dt.year}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  String _formatPhilippineDateTime(String iso) {
+    if (iso.trim().isEmpty) return 'N/A';
+    try {
+      final dt = _parseToPhilippineTime(iso);
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final monthStr = months[dt.month - 1];
+      final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      final minStr = dt.minute.toString().padLeft(2, '0');
+      return '$monthStr ${dt.day}, ${dt.year} • $hour:$minStr $ampm';
     } catch (_) {
       return iso;
     }
@@ -653,8 +708,11 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                 child: _SummaryCardTile(
                                   title: 'Last Entry',
                                   value: lastEntry.loggedAt.isNotEmpty
-                                      ? lastEntry.loggedAt
+                                      ? _formatPhilippineTime(lastEntry.loggedAt)
                                       : 'No entries',
+                                  subText: lastEntry.loggedAt.isNotEmpty
+                                      ? _formatPhilippineDate(lastEntry.loggedAt)
+                                      : 'No recent activity',
                                   badge: lastEntry.loggedAt.isNotEmpty ? 'AUTHORIZED' : null,
                                   badgeColor: const Color(0xFF10B981),
                                   icon: Icons.arrow_downward_rounded,
@@ -666,8 +724,11 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                 child: _SummaryCardTile(
                                   title: 'Last Exit',
                                   value: lastExit.loggedAt.isNotEmpty
-                                      ? lastExit.loggedAt
+                                      ? _formatPhilippineTime(lastExit.loggedAt)
                                       : 'No exits',
+                                  subText: lastExit.loggedAt.isNotEmpty
+                                      ? _formatPhilippineDate(lastExit.loggedAt)
+                                      : 'No recent activity',
                                   badge: lastExit.loggedAt.isNotEmpty ? 'AUTHORIZED' : null,
                                   badgeColor: const Color(0xFF3B82F6),
                                   icon: Icons.arrow_upward_rounded,
@@ -1452,7 +1513,7 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                               ),
                                               SizedBox(height: 2.h),
                                               Text(
-                                                item.loggedAt,
+                                                _formatPhilippineDateTime(item.loggedAt),
                                                 style: TextStyle(
                                                   fontSize: 11.sp,
                                                   color: const Color(0xFFA1A1AA),

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { adminAuthApi, type DashboardOverviewData } from "../../services/adminApi";
+import { useAuth } from "../../hooks/useAuth";
 import GuardActivityLogs from "../SecurityGuards/GuardActivityLogs";
 import CameraFeedPanel from "../Camera/CameraFeedPanel";
 import type { CameraHealthStatus } from "../Camera/StatusBadge";
@@ -59,8 +60,15 @@ const resolveExitStreamUrl = (data: DashboardOverviewData | null) => {
 
 const DashboardSkeleton = () => (
   <div className="space-y-6 animate-pulse">
-    <div className="flex justify-between items-center">
-      <div className="h-10 w-72 rounded-full bg-zinc-200/80" />
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-zinc-200/80 dark:border-white/10 pb-5">
+      <div className="flex items-center gap-3.5">
+        <div className="h-11 w-11 rounded-2xl bg-zinc-200/80 dark:bg-zinc-700/80 shrink-0" />
+        <div className="space-y-2">
+          <div className="h-6 w-64 rounded bg-zinc-200/80 dark:bg-zinc-700/80" />
+          <div className="h-4 w-80 rounded bg-zinc-200/80 dark:bg-zinc-700/80" />
+        </div>
+      </div>
+      <div className="h-10 w-60 rounded-full bg-zinc-200/80 dark:bg-zinc-700/80" />
     </div>
     <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
       {[1, 2, 3, 4].map((i) => (
@@ -139,7 +147,17 @@ const AdminDashboard = () => {
   } | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [searchQuery, setSearchQuery] = useState("");
+  const { user } = useAuth();
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const displayName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username || "Administrator";
 
   const loadOverview = useCallback(() => {
     return adminAuthApi.dashboardOverview().then((res) => {
@@ -305,35 +323,31 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-6 text-zinc-900 dark:text-zinc-100">
-      {/* ── Top ACRU-Style Minimalist Bar ── */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        {/* Search Pill */}
-        <div className="relative w-full max-w-sm">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <svg
-              className="h-4 w-4 text-zinc-400 dark:text-zinc-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+      {/* ── Header ── */}
+      <div className="flex flex-col gap-4 border-b border-zinc-200/80 dark:border-white/10 pb-5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-900 dark:bg-emerald-600 text-white shadow-xs shrink-0">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l1 1h1m8-1h1l1-1V9l-3-3h-1m-3 0V4m3 12V9" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white">Resident Car Entry &amp; Exit Monitor</h1>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Gate Security System &mdash; Administrator Portal &nbsp;&bull;&nbsp; <span className="text-zinc-700 dark:text-zinc-200 font-semibold">Welcome, {displayName}</span></p>
+            </div>
           </div>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Quick search (residents, plates, logs)..."
-            className="w-full rounded-full border border-zinc-200/80 dark:border-zinc-700/80 bg-white/80 dark:bg-zinc-800/80 py-2.5 pl-10 pr-4 text-xs font-medium text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 outline-none backdrop-blur-md transition-all focus:border-zinc-400 dark:focus:border-zinc-500 focus:bg-white dark:focus:bg-zinc-800 focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 shadow-xs"
-          />
+          <div className="flex items-center gap-2.5 self-start rounded-full bg-white/85 dark:bg-zinc-800/85 border border-zinc-200/80 dark:border-white/10 px-4 py-2 text-zinc-700 dark:text-zinc-300 shadow-xs backdrop-blur-md md:self-auto">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <svg className="w-4 h-4 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="font-mono text-xs font-semibold tracking-wide text-zinc-800 dark:text-zinc-200">
+              {currentTime.toLocaleDateString("en-US", { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })} &bull; {currentTime.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Manila' })}
+            </span>
+          </div>
         </div>
-
-
       </div>
 
       {/* ── Stat Cards Grid ── */}

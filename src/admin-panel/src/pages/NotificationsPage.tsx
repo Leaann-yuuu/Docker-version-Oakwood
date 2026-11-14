@@ -6,6 +6,22 @@ import { useModalAnimation } from '../hooks/useModalAnimation'
 import ToastMessage from '../components/ToastMessage/ToastMessage'
 import { MaskedEmail } from '../components/MaskedEmail/MaskedEmail'
 
+const BACKEND_ORIGIN = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8080/api').replace(/\/api\/?$/, '')
+
+const resolveDocumentUrl = (path?: string | null): string | null => {
+  if (!path) return null
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  if (path.startsWith('/api/')) return `${BACKEND_ORIGIN}${path}`
+  const clean = path.replace(/^\/+/, '')
+  if (clean.startsWith('img/vehicles/or_cr/')) {
+    return `${BACKEND_ORIGIN}/api/resident-documents/or_cr/${clean.split('/').pop()}`
+  }
+  if (clean.startsWith('img/vehicles/license/')) {
+    return `${BACKEND_ORIGIN}/api/resident-documents/license/${clean.split('/').pop()}`
+  }
+  return `${BACKEND_ORIGIN}/storage/${clean}`
+}
+
 interface ConfirmationModalProps {
   isOpen: boolean
   title: string
@@ -100,6 +116,14 @@ const NotificationsPage = () => {
     message: string
     type: 'accept' | 'reject' | 'delete' | 'clear_all'
     notificationId: number
+  } | null>(null)
+  const [previewDoc, setPreviewDoc] = useState<{
+    residentName: string
+    activeTab: 'or_cr' | 'valid_id' | 'both'
+    orCrUrl: string | null
+    validIdUrl: string | null
+    vehicleType?: string | null
+    plateNumber?: string | null
   } | null>(null)
 
   const fetchNotifications = (silent = false) => {
@@ -285,22 +309,26 @@ const NotificationsPage = () => {
                 </div>
 
                 <div className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">
-                  {n.type === 'registration_approval' && details ? (
-                    <div className="rounded-lg bg-zinc-50 p-4 border border-zinc-200/80 dark:bg-zinc-900/50 dark:border-white/5">
-                      <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-4">Request Details</p>
-                      
-                      <div className="flex flex-col gap-3 text-zinc-700 dark:text-zinc-300 text-[13.5px]">
-                        <div className="flex items-center gap-3">
-                          <span className="text-zinc-500 dark:text-zinc-400 w-12 font-medium">Name:</span> 
-                          <span className="font-semibold text-zinc-900 dark:text-zinc-100">{details.name}</span>
-                        </div>
-                        
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <span className="text-zinc-500 dark:text-zinc-400 w-12 font-medium">Role:</span> 
-                            <span className="capitalize font-semibold text-zinc-900 dark:text-zinc-100">{details.role.replace('_', ' ')}</span>
-                          </div>
-                          <div className="flex gap-3 shrink-0">
+                  {n.type === 'registration_approval' && details ? (() => {
+                    const isResidentRequest = String(details.role || '').toLowerCase() === 'resident'
+                    const orCrUrl = resolveDocumentUrl(details.or_cr_image)
+                    const validIdUrl = resolveDocumentUrl(details.valid_id_image)
+                    const openVerificationModal = (tab: 'or_cr' | 'valid_id' | 'both') => {
+                      setPreviewDoc({
+                        residentName: details.name,
+                        activeTab: tab,
+                        orCrUrl,
+                        validIdUrl,
+                        vehicleType: details.vehicle_type,
+                        plateNumber: details.plate_number,
+                      })
+                    }
+
+                    return (
+                      <div className="rounded-lg bg-zinc-50 p-4 border border-zinc-200/80 dark:bg-zinc-900/50 dark:border-white/5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                          <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Request Details</p>
+                          <div className="flex flex-wrap gap-2.5 shrink-0">
                             <button
                               onClick={() => handleApproveClick(n.notification_id)}
                               disabled={actionLoading !== null}
@@ -317,14 +345,81 @@ const NotificationsPage = () => {
                             </button>
                           </div>
                         </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-zinc-700 dark:text-zinc-300 text-[13.5px]">
+                          <div className="flex items-center gap-3">
+                            <span className="text-zinc-500 dark:text-zinc-400 w-32 font-medium shrink-0">Name:</span> 
+                            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{details.name}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-3">
+                            <span className="text-zinc-500 dark:text-zinc-400 w-32 font-medium shrink-0">Role:</span> 
+                            <span className="capitalize font-semibold text-zinc-900 dark:text-zinc-100">{details.role.replace('_', ' ')}</span>
+                          </div>
 
-                        <div className="flex items-center gap-3">
-                          <span className="text-zinc-500 dark:text-zinc-400 w-12 font-medium">Email:</span> 
-                          <MaskedEmail email={details.email} />
+                          <div className="flex items-center gap-3">
+                            <span className="text-zinc-500 dark:text-zinc-400 w-32 font-medium shrink-0">Email:</span> 
+                            <MaskedEmail email={details.email} />
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-zinc-500 dark:text-zinc-400 w-32 font-medium shrink-0">Contact No:</span>
+                            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                              {details.contact_number || 'Not provided'}
+                            </span>
+                          </div>
+
+                          {isResidentRequest && (
+                            <>
+                              <div className="flex items-center gap-3">
+                                <span className="text-zinc-500 dark:text-zinc-400 w-32 font-medium shrink-0">Vehicle Type:</span>
+                                <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                  {details.vehicle_type || 'Not provided'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <span className="text-zinc-500 dark:text-zinc-400 w-32 font-medium shrink-0">Plate Number:</span>
+                                {details.plate_number ? (
+                                  <span className="inline-flex items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-xs font-bold tracking-wider text-emerald-700 dark:text-emerald-300">
+                                    {details.plate_number}
+                                  </span>
+                                ) : (
+                                  <span className="text-zinc-500 dark:text-zinc-400 italic">Not provided</span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3 md:col-span-2">
+                                <span className="text-zinc-500 dark:text-zinc-400 w-32 font-medium shrink-0">Valid ID &amp; OR/CR:</span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => openVerificationModal('or_cr')}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25 transition cursor-pointer"
+                                  >
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    View Valid ID &amp; OR/CR
+                                  </button>
+                                  {(orCrUrl || validIdUrl) ? (
+                                    <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                      Uploaded
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                                      No file
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ) : (
+                    )
+                  })() : (
                     <p className="text-zinc-700 dark:text-zinc-300">{n.message}</p>
                   )}
                 </div>
@@ -370,6 +465,133 @@ const NotificationsPage = () => {
           }
         }}
       />
+
+      {previewDoc && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div
+            className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-white/15 bg-zinc-900 p-5 shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {previewDoc.residentName} — Valid ID & OR/CR Verification
+                </h3>
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  Vehicle Type: <span className="font-semibold text-zinc-200">{previewDoc.vehicleType || 'Not provided'}</span>
+                  {' • '}
+                  Plate Number: <span className="font-mono font-semibold text-emerald-400">{previewDoc.plateNumber || 'Not provided'}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white transition cursor-pointer"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 overflow-y-auto pr-1 md:grid-cols-2">
+              <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      Valid ID (Resident Verification)
+                    </span>
+                    {previewDoc.validIdUrl ? (
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        Uploaded
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                        Not Uploaded
+                      </span>
+                    )}
+                  </div>
+                  {previewDoc.validIdUrl && (
+                    <a
+                      href={previewDoc.validIdUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                    >
+                      Open Full Image
+                    </a>
+                  )}
+                </div>
+                {previewDoc.validIdUrl ? (
+                  <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                    <img
+                      src={previewDoc.validIdUrl}
+                      alt="Valid ID Document"
+                      className="max-h-[60vh] w-auto rounded-lg object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+                    <p className="text-sm font-semibold text-zinc-300">No Valid ID Uploaded</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      This resident did not attach a Valid ID photo during registration.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      Vehicle OR/CR Document
+                    </span>
+                    {previewDoc.orCrUrl ? (
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        Uploaded
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                        Not Uploaded
+                      </span>
+                    )}
+                  </div>
+                  {previewDoc.orCrUrl && (
+                    <a
+                      href={previewDoc.orCrUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                    >
+                      Open Full Image
+                    </a>
+                  )}
+                </div>
+                {previewDoc.orCrUrl ? (
+                  <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                    <img
+                      src={previewDoc.orCrUrl}
+                      alt="Vehicle OR/CR Document"
+                      className="max-h-[60vh] w-auto rounded-lg object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+                    <p className="text-sm font-semibold text-zinc-300">No OR/CR Uploaded</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      This resident did not attach a Vehicle OR/CR photo during registration.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

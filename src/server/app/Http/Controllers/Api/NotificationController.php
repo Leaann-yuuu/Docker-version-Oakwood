@@ -15,6 +15,31 @@ class NotificationController extends Controller
             ->orderByDesc('created_at')
             ->paginate(20);
 
+        $notifications->getCollection()->transform(function (Notification $notification) {
+            if ($notification->type === 'registration_approval') {
+                $data = json_decode($notification->message, true);
+                if (is_array($data) && !empty($data['target_user_id'])) {
+                    $targetUser = \App\Models\User::with('vehicles')->find($data['target_user_id']);
+                    if ($targetUser) {
+                        $primaryVehicle = $targetUser->vehicles->first();
+                        $data['contact_number'] = $data['contact_number'] ?? $targetUser->contact_number;
+                        $data['birth_date'] = $data['birth_date'] ?? $targetUser->birth_date;
+                        $data['vehicle_type'] = $data['vehicle_type'] ?? ($primaryVehicle?->car_model ?: $targetUser->car_model);
+                        $data['plate_number'] = $data['plate_number'] ?? ($primaryVehicle?->plate_number ?: $targetUser->plate_number);
+
+                        if (empty($data['or_cr_image']) && !empty($primaryVehicle?->or_cr_image)) {
+                            $data['or_cr_image'] = '/api/resident-documents/or_cr/' . basename($primaryVehicle->or_cr_image);
+                        }
+                        if (empty($data['valid_id_image']) && !empty($primaryVehicle?->license_image)) {
+                            $data['valid_id_image'] = '/api/resident-documents/license/' . basename($primaryVehicle->license_image);
+                        }
+                        $notification->message = json_encode($data);
+                    }
+                }
+            }
+            return $notification;
+        });
+
         return response()->json(['notifications' => $notifications], 200);
     }
 
@@ -88,6 +113,7 @@ class NotificationController extends Controller
         }
 
         $user->update(['is_approved' => true]);
+        $user->vehicles()->update(['status' => 'approved']);
 
         $plainPassword = $data['plain_password'];
         $email = trim((string) $user->email);

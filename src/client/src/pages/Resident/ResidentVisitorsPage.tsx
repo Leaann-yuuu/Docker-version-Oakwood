@@ -9,11 +9,37 @@ import type {
 import Spinner from "../../components/Spinner/Spinner";
 import { formatPlateInput } from "../../utils/plateOcr";
 
+const getCurrentPhilippineTimeInput = (): string => {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return formatter.format(now);
+};
+
+const formatTimeDisplay = (timeStr?: string | null): string => {
+  if (!timeStr) return "";
+  const trimmed = timeStr.trim();
+  if (/am|pm/i.test(trimmed)) return trimmed;
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    let hour = parseInt(match[1], 10);
+    const minute = match[2];
+    const ampm = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12 || 12;
+    return `${String(hour).padStart(2, "0")}:${minute} ${ampm}`;
+  }
+  return trimmed;
+};
+
 const blankResidentForm: ResidentCreatePayload = {
   full_name: "",
   contact_number: "",
   visit_date: new Date().toISOString().split("T")[0],
-  visit_time: "14:00",
+  visit_time: getCurrentPhilippineTimeInput(),
   purpose: "",
   vehicle_plate: "",
   vehicle_type: "",
@@ -80,8 +106,10 @@ export default function ResidentVisitorsPage() {
     setNotice(null);
 
     try {
+      const formattedTime = formatTimeDisplay(form.visit_time);
       const res = await VisitorService.residentCreate({
         ...form,
+        visit_time: formattedTime || form.visit_time,
         vehicle_plate: form.vehicle_plate.trim().toUpperCase(),
         vehicle_type: form.vehicle_type.trim(),
       });
@@ -237,7 +265,7 @@ export default function ResidentVisitorsPage() {
                     </p>
                   </div>
                   <span className="text-[11px] font-mono font-bold text-zinc-500">
-                    Arrival: {walkin.visit_time}
+                    Arrival: {formatTimeDisplay(walkin.visit_time)}
                   </span>
                 </div>
 
@@ -361,7 +389,7 @@ export default function ResidentVisitorsPage() {
                   <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400 pt-1">
                     <span>
                       📅 <strong className="text-zinc-600 dark:text-zinc-300">{item.visit_date}</strong> at{" "}
-                      <strong className="text-zinc-600 dark:text-zinc-300">{item.visit_time}</strong>
+                      <strong className="text-zinc-600 dark:text-zinc-300">{formatTimeDisplay(item.visit_time)}</strong>
                     </span>
                     {item.visitor?.vehicle_plate && (
                       <span>
@@ -490,7 +518,12 @@ export default function ResidentVisitorsPage() {
                       required
                       value={form.visit_date}
                       onChange={(e) => setForm({ ...form, visit_date: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                      onClick={(e) => {
+                        try {
+                          e.currentTarget.showPicker();
+                        } catch {}
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
                     />
                   </div>
 
@@ -499,12 +532,16 @@ export default function ResidentVisitorsPage() {
                       Expected Time of Visit <span className="text-rose-500">*</span>
                     </label>
                     <input
-                      type="text"
+                      type="time"
                       required
-                      placeholder="e.g. 02:00 PM"
                       value={form.visit_time}
                       onChange={(e) => setForm({ ...form, visit_time: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                      onClick={(e) => {
+                        try {
+                          e.currentTarget.showPicker();
+                        } catch {}
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
                     />
                   </div>
                 </div>
@@ -641,7 +678,7 @@ export default function ResidentVisitorsPage() {
                     </div>
                     <div>
                       <span className="text-zinc-400">Time:</span>{" "}
-                      <span className="font-bold">{selectedRequest.visit_time}</span>
+                      <span className="font-bold">{formatTimeDisplay(selectedRequest.visit_time)}</span>
                     </div>
                     <div>
                       <span className="text-zinc-400">Visitor Contact:</span>{" "}

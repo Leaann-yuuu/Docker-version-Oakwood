@@ -325,8 +325,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
             SizedBox(height: 16.h),
 
-            // ── Appearance Card ────────────────────────────────────────
-            _buildAppearanceCard(),
+            // ── Sign Out Button ─────────────────────────────────────────
+            _buildSignOutButton(),
           ],
         ),
       ),
@@ -1039,14 +1039,76 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // ── Appearance Card ───────────────────────────────────────────────────────
-  Widget _buildAppearanceCard() {
-    return _SectionCard(
-      icon: Icons.palette_outlined,
-      iconColor: AppColors.primary,
-      iconBgColor: AppColors.primaryLight,
-      title: 'Appearance',
-      child: const ThemeToggle(variant: ThemeToggleVariant.expanded),
+  // ── Sign Out Button ────────────────────────────────────────────────────────
+  Widget _buildSignOutButton() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E232D) : Colors.white,
+        borderRadius: BorderRadius.circular(20.r),
+        border: Border.all(
+          color: isDark
+              ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+              : const Color(0xFFFCA5A5).withValues(alpha: 0.5),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _confirmLogout,
+          borderRadius: BorderRadius.circular(20.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 16.h),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 38.r,
+                  height: 38.r,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF7F1D1D).withValues(alpha: 0.35)
+                        : const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFFEF4444).withValues(alpha: 0.35)
+                          : const Color(0xFFFCA5A5).withValues(alpha: 0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.logout_rounded,
+                      color: const Color(0xFFEF4444),
+                      size: 20.r,
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12.w),
+                Text(
+                  'Sign Out',
+                  style: TextStyle(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

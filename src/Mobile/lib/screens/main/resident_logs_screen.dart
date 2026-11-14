@@ -173,6 +173,25 @@ class _LogItemTile extends StatelessWidget {
   final GateLogModel log;
   const _LogItemTile({required this.log});
 
+  String _formatPhilippineDateTime(String iso) {
+    if (iso.trim().isEmpty) return 'N/A';
+    try {
+      final parsed = DateTime.parse(iso.trim());
+      final dt = parsed.isUtc ? parsed.add(const Duration(hours: 8)) : parsed;
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final monthStr = months[dt.month - 1];
+      final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      final minStr = dt.minute.toString().padLeft(2, '0');
+      return '$monthStr ${dt.day}, ${dt.year} • $hour:$minStr $ampm';
+    } catch (_) {
+      return iso;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEntry = log.direction == 'IN';
@@ -209,7 +228,7 @@ class _LogItemTile extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          'Plate: ${log.plateNumber ?? 'N/A'} • ${log.loggedAt}',
+          'Plate: ${log.plateNumber ?? 'N/A'} • ${_formatPhilippineDateTime(log.loggedAt)}',
           style: TextStyle(
             fontSize: 12.sp,
             color: AppColors.textSecondary,

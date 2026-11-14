@@ -273,7 +273,7 @@ const ResidentHomePage = () => {
                                         </span>
                                     </div>
                                     <p className="text-xs text-zinc-600 dark:text-zinc-300">
-                                        <span className="font-semibold text-zinc-900 dark:text-white">Purpose:</span> {walkin.purpose} &bull; <span className="font-semibold">Arrival:</span> {walkin.visit_time}
+                                        <span className="font-semibold text-zinc-900 dark:text-white">Purpose:</span> {walkin.purpose} &bull; <span className="font-semibold">Arrival:</span> {formatTimeDisplay(walkin.visit_time)}
                                     </p>
                                     {walkin.visitor?.vehicle_plate && (
                                         <p className="text-xs text-zinc-500 font-mono">
@@ -863,10 +863,24 @@ const countToday = (logs: GateLog[], direction: GateLog["direction"]) => {
     return logs.filter((log) => log.direction === direction && new Date(log.logged_at).toDateString() === today).length;
 };
 
-const formatDate = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" });
-const formatTime = (value: string) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-const formatRelative = (value: string) => new Date(value).toLocaleString();
-const formatMaybeDate = (value?: string) => value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" }) : "N/A";
+const formatDate = (value: string) => new Date(value).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "2-digit", year: "numeric" });
+const formatTime = (value: string) => new Date(value).toLocaleTimeString("en-US", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit" });
+const formatRelative = (value: string) => new Date(value).toLocaleString("en-US", { timeZone: "Asia/Manila" });
+const formatMaybeDate = (value?: string) => value ? new Date(value).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "2-digit", year: "numeric" }) : "N/A";
+const formatTimeDisplay = (timeStr?: string | null): string => {
+  if (!timeStr) return "";
+  const trimmed = timeStr.trim();
+  if (/am|pm/i.test(trimmed)) return trimmed;
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    let hour = parseInt(match[1], 10);
+    const minute = match[2];
+    const ampm = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12 || 12;
+    return `${String(hour).padStart(2, "0")}:${minute} ${ampm}`;
+  }
+  return trimmed;
+};
 const labelize = (value: string) => value.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
 const limitText = (value: string, limit: number) => value.length > limit ? `${value.slice(0, limit)}...` : value;
 

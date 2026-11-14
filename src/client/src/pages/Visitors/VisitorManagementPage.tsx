@@ -13,12 +13,38 @@ import { formatPlateInput } from "../../utils/plateOcr";
 
 type TabMode = "pending_resident" | "approved_guests" | "walkins_queue" | "all_records";
 
+const getCurrentPhilippineTimeInput = (): string => {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return formatter.format(now);
+};
+
+const formatTimeDisplay = (timeStr?: string | null): string => {
+  if (!timeStr) return "";
+  const trimmed = timeStr.trim();
+  if (/am|pm/i.test(trimmed)) return trimmed;
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    let hour = parseInt(match[1], 10);
+    const minute = match[2];
+    const ampm = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12 || 12;
+    return `${String(hour).padStart(2, "0")}:${minute} ${ampm}`;
+  }
+  return trimmed;
+};
+
 const blankWalkinForm: GuardCreatePayload = {
   full_name: "",
   contact_number: "",
   resident_id: 0,
   visit_date: new Date().toISOString().split("T")[0],
-  visit_time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  visit_time: getCurrentPhilippineTimeInput(),
   purpose: "",
   vehicle_plate: "",
   vehicle_type: "",
@@ -220,8 +246,10 @@ export default function VisitorManagementPage() {
     setSubmittingWalkin(true);
     setNotice(null);
     try {
+      const formattedTime = formatTimeDisplay(walkinForm.visit_time);
       const res = await VisitorService.guardCreate({
         ...walkinForm,
+        visit_time: formattedTime || walkinForm.visit_time,
         vehicle_plate: walkinForm.vehicle_plate.trim().toUpperCase(),
         vehicle_type: walkinForm.vehicle_type.trim(),
       });
@@ -234,7 +262,7 @@ export default function VisitorManagementPage() {
       setWalkinForm({
         ...blankWalkinForm,
         visit_date: new Date().toISOString().split("T")[0],
-        visit_time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        visit_time: getCurrentPhilippineTimeInput(),
       });
       setResidentSearch("");
       setTab("walkins_queue");
@@ -704,7 +732,7 @@ export default function VisitorManagementPage() {
                   >
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       <p className="font-mono font-bold text-zinc-900 dark:text-white">#{req.request_id}</p>
-                      <p className="text-[11px] text-zinc-400">{req.visit_date} • {req.visit_time}</p>
+                      <p className="text-[11px] text-zinc-400">{req.visit_date} • {formatTimeDisplay(req.visit_time)}</p>
                     </td>
 
                     <td className="px-5 py-3.5">
@@ -924,7 +952,12 @@ export default function VisitorManagementPage() {
                     required
                     value={walkinForm.visit_date}
                     onChange={(e) => setWalkinForm({ ...walkinForm, visit_date: e.target.value })}
-                    className="w-full px-4 py-2 sm:py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-lime-500"
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker();
+                      } catch {}
+                    }}
+                    className="w-full px-4 py-2 sm:py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-lime-500 cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
                   />
                 </div>
 
@@ -933,12 +966,16 @@ export default function VisitorManagementPage() {
                     Time of Arrival <span className="text-rose-500">*</span>
                   </label>
                   <input
-                    type="text"
+                    type="time"
                     required
-                    placeholder="e.g. 02:30 PM"
                     value={walkinForm.visit_time}
                     onChange={(e) => setWalkinForm({ ...walkinForm, visit_time: e.target.value })}
-                    className="w-full px-4 py-2 sm:py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-lime-500"
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker();
+                      } catch {}
+                    }}
+                    className="w-full px-4 py-2 sm:py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-lime-500 cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
                   />
                 </div>
               </div>
@@ -1138,7 +1175,7 @@ export default function VisitorManagementPage() {
                   </div>
                   <div>
                     <span className="text-zinc-400">Visit Schedule:</span>{" "}
-                    <span className="font-semibold">{selectedRequest.visit_date} @ {selectedRequest.visit_time}</span>
+                    <span className="font-semibold">{selectedRequest.visit_date} @ {formatTimeDisplay(selectedRequest.visit_time)}</span>
                   </div>
                 </div>
               </div>

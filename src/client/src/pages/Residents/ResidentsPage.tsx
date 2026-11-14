@@ -4,6 +4,22 @@ import GateAccessService from "../../services/GateAccessService";
 import type { ResidentRow } from "../../interfaces/GateInterface";
 import Spinner from "../../components/Spinner/Spinner";
 
+const BACKEND_ORIGIN = (import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8080/api").replace(/\/api\/?$/, "");
+
+const resolveDocumentUrl = (path?: string | null): string | null => {
+    if (!path) return null;
+    if (path.startsWith("http://") || path.startsWith("https://")) return path;
+    if (path.startsWith("/api/")) return `${BACKEND_ORIGIN}${path}`;
+    const clean = path.replace(/^\/+/, "");
+    if (clean.startsWith("img/vehicles/or_cr/")) {
+        return `${BACKEND_ORIGIN}/api/resident-documents/or_cr/${clean.split("/").pop()}`;
+    }
+    if (clean.startsWith("img/vehicles/license/")) {
+        return `${BACKEND_ORIGIN}/api/resident-documents/license/${clean.split("/").pop()}`;
+    }
+    return `${BACKEND_ORIGIN}/storage/${clean}`;
+};
+
 const ResidentsSkeleton = () => (
     <div className="animate-pulse space-y-4">
         <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700">
@@ -200,6 +216,15 @@ const ResidentDetailsModal = ({
     resident: ResidentRow;
     onClose: () => void;
 }) => {
+    const [previewDoc, setPreviewDoc] = useState<{
+        residentName: string;
+        activeTab: "or_cr" | "valid_id" | "both";
+        orCrUrl: string | null;
+        validIdUrl: string | null;
+        vehicleType?: string | null;
+        plateNumber?: string | null;
+    } | null>(null);
+
     const vehiclesList = (resident.vehicles && resident.vehicles.length > 0)
         ? resident.vehicles
         : (resident.plate_number ? [{
@@ -207,7 +232,28 @@ const ResidentDetailsModal = ({
             car_model: resident.car_model || "N/A",
             car_color: resident.car_color || "N/A",
             is_primary: true,
+            or_cr_image: null,
+            license_image: null,
         }] : []);
+
+    const primaryVeh = vehiclesList.find((v) => v.is_primary) || vehiclesList[0];
+    const primaryOrCrUrl = resolveDocumentUrl(primaryVeh?.or_cr_image);
+    const primaryValidIdUrl = resolveDocumentUrl(primaryVeh?.license_image);
+
+    const openResidentDocs = (
+        tab: "or_cr" | "valid_id" | "both",
+        veh?: (typeof vehiclesList)[number]
+    ) => {
+        const target = veh || primaryVeh;
+        setPreviewDoc({
+            residentName: fullName(resident),
+            activeTab: tab,
+            orCrUrl: resolveDocumentUrl(target?.or_cr_image),
+            validIdUrl: resolveDocumentUrl(target?.license_image),
+            vehicleType: target?.car_model || resident.car_model,
+            plateNumber: target?.plate_number || resident.plate_number,
+        });
+    };
 
     return createPortal(
         <div className="fixed inset-0 z-[100000] overflow-y-auto">
@@ -239,16 +285,25 @@ const ResidentDetailsModal = ({
                                 </p>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition cursor-pointer"
-                            aria-label="Close"
-                        >
-                            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => openResidentDocs("both")}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition cursor-pointer"
+                            >
+                                View OR/CR &amp; ID
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition cursor-pointer"
+                                aria-label="Close"
+                            >
+                                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Content */}
@@ -256,7 +311,7 @@ const ResidentDetailsModal = ({
                         {/* Personal Details Grid */}
                         <div>
                             <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                                Personal Information
+                                Personal &amp; Verification Information
                             </h4>
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <InfoItem label="Email Address" value={resident.email || "N/A"} />
@@ -265,6 +320,27 @@ const ResidentDetailsModal = ({
                                 <InfoItem label="Birthdate" value={resident.birth_date || "N/A"} />
                                 <InfoItem label="Age" value={resident.age ? String(resident.age) : "N/A"} />
                                 <InfoItem label="Address" value={resident.address || "N/A"} />
+                                <InfoItem label="Vehicle Type" value={primaryVeh?.car_model || resident.car_model || "Not provided"} />
+                                <InfoItem label="Plate Number" value={primaryVeh?.plate_number || resident.plate_number || "Not provided"} />
+                                <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-3.5 dark:border-zinc-800/80 dark:bg-zinc-900/40 sm:col-span-2">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Valid ID & OR/CR (Resident & Vehicle Verification)</p>
+                                    <div className="mt-1.5 flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => openResidentDocs("both")}
+                                            className="inline-flex items-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/25 transition cursor-pointer"
+                                        >
+                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                            View Valid ID & OR/CR
+                                        </button>
+                                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${primaryOrCrUrl || primaryValidIdUrl ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                                            {primaryOrCrUrl || primaryValidIdUrl ? "Uploaded" : "No file"}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -292,18 +368,27 @@ const ResidentDetailsModal = ({
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                                        {vehicle.car_model || "Car Model Unspecified"}
+                                                        {vehicle.car_model || "Vehicle Type Unspecified"}
                                                     </p>
                                                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
                                                         Color: {vehicle.car_color || "N/A"}
                                                     </p>
                                                 </div>
                                             </div>
-                                            {vehicle.is_primary && (
-                                                <span className="self-start sm:self-auto rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                                    Primary Vehicle
-                                                </span>
-                                            )}
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openResidentDocs("both", vehicle)}
+                                                    className="rounded-md border border-indigo-500/30 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/25 transition cursor-pointer"
+                                                >
+                                                    View Valid ID & OR/CR
+                                                </button>
+                                                {vehicle.is_primary && (
+                                                    <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                        Primary Vehicle
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -327,6 +412,132 @@ const ResidentDetailsModal = ({
                     </div>
                 </div>
             </div>
+
+            {previewDoc && (
+                <div
+                    className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+                    onClick={() => setPreviewDoc(null)}
+                >
+                    <div
+                        className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-white/15 bg-zinc-900 p-5 shadow-2xl flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3">
+                            <div>
+                                <h3 className="text-base font-bold text-white">
+                                    {previewDoc.residentName} — Valid ID & OR/CR Verification
+                                </h3>
+                                <p className="mt-0.5 text-xs text-zinc-400">
+                                    Vehicle Type: <span className="font-semibold text-zinc-200">{previewDoc.vehicleType || "Not provided"}</span>
+                                    {" • "}
+                                    Plate Number: <span className="font-mono font-semibold text-emerald-400">{previewDoc.plateNumber || "Not provided"}</span>
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setPreviewDoc(null)}
+                                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white transition cursor-pointer"
+                            >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 overflow-y-auto pr-1 md:grid-cols-2">
+                            <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                                <div className="mb-2.5 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                                            Valid ID (Resident Verification)
+                                        </span>
+                                        {previewDoc.validIdUrl ? (
+                                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                                Uploaded
+                                            </span>
+                                        ) : (
+                                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                                                Not Uploaded
+                                            </span>
+                                        )}
+                                    </div>
+                                    {previewDoc.validIdUrl && (
+                                        <a
+                                            href={previewDoc.validIdUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                                        >
+                                            Open Full Image
+                                        </a>
+                                    )}
+                                </div>
+                                {previewDoc.validIdUrl ? (
+                                    <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                                        <img
+                                            src={previewDoc.validIdUrl}
+                                            alt="Valid ID Document"
+                                            className="max-h-[60vh] w-auto rounded-lg object-contain"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+                                        <p className="text-sm font-semibold text-zinc-300">No Valid ID Uploaded</p>
+                                        <p className="mt-1 text-xs text-zinc-500">
+                                            This resident has not uploaded a Valid ID photo yet.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                                <div className="mb-2.5 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                                            Vehicle OR/CR Document
+                                        </span>
+                                        {previewDoc.orCrUrl ? (
+                                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                                Uploaded
+                                            </span>
+                                        ) : (
+                                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                                                Not Uploaded
+                                            </span>
+                                        )}
+                                    </div>
+                                    {previewDoc.orCrUrl && (
+                                        <a
+                                            href={previewDoc.orCrUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                                        >
+                                            Open Full Image
+                                        </a>
+                                    )}
+                                </div>
+                                {previewDoc.orCrUrl ? (
+                                    <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                                        <img
+                                            src={previewDoc.orCrUrl}
+                                            alt="Vehicle OR/CR Document"
+                                            className="max-h-[60vh] w-auto rounded-lg object-contain"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+                                        <p className="text-sm font-semibold text-zinc-300">No OR/CR Uploaded</p>
+                                        <p className="mt-1 text-xs text-zinc-500">
+                                            This resident has not uploaded a Vehicle OR/CR photo yet.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>,
         document.body
     );
