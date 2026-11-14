@@ -5,3 +5,4 @@ src/Mobile/build/
 src/Mobile/.dart_tool/
 .DS_Store
 
+.env
