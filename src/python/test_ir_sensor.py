@@ -13,10 +13,14 @@ except ImportError:
     print("Error: 'pyserial' is not installed. Run: pip install pyserial")
     sys.exit(1)
 
+# Auto-close delay (seconds) after obstacle clears
+AUTO_CLOSE_DELAY = float(os.environ.get("AUTO_CLOSE_DELAY", "5.0"))
+
 # Global sensor state
 latest_sensor_state = {
     "status": 0,
     "state": "CLEAR",
+    "gate": "CLOSED",
     "updated": time.time()
 }
 
@@ -89,23 +93,78 @@ def main():
         print("   Tip 2: You can still open http://localhost:8080 to test the Web Serial button or Simulation mode!\n")
         ser = None
 
+    gate_is_open = False
+    clear_since = None
+    last_countdown_printed = None
+
+    print(f"Auto Gate Mode: Obstacle (1) -> OPEN | Clear (0) for {AUTO_CLOSE_DELAY:.0f}s -> CLOSE\n")
+
     try:
         while True:
             if ser and ser.in_waiting > 0:
                 line = ser.readline().decode(errors="ignore").strip()
                 if line:
+                    lower_line = line.lower()
                     if line.startswith("1"):
                         latest_sensor_state["status"] = 1
                         latest_sensor_state["state"] = "BLOCKED"
                         latest_sensor_state["updated"] = time.time()
+                        clear_since = None
+                        last_countdown_printed = None
                         print(f"\033[91;1m>> 1 (BLOCKED - Obstacle detected)\033[0m")
+
+                        if not gate_is_open:
+                            print("[AUTO GATE] Obstacle detected -> Sending 'O' (OPENING GATE)")
+                            ser.write(b"O")
+                            ser.flush()
+                            gate_is_open = True
+                            latest_sensor_state["gate"] = "OPEN"
                     elif line.startswith("0"):
                         latest_sensor_state["status"] = 0
                         latest_sensor_state["state"] = "CLEAR"
                         latest_sensor_state["updated"] = time.time()
                         print(f"\033[92;1m>> 0 (NOT BLOCKED - Clear)\033[0m")
+
+                        if gate_is_open and clear_since is None:
+                            clear_since = time.time()
+                            last_countdown_printed = None
                     else:
                         print(f"   {line}")
+                        if "gate open!" in lower_line:
+                            gate_is_open = True
+                            latest_sensor_state["gate"] = "OPEN"
+                            if latest_sensor_state["status"] == 0 and clear_since is None:
+                                clear_since = time.time()
+                                last_countdown_printed = None
+                        elif "gate closed!" in lower_line:
+                            gate_is_open = False
+                            clear_since = None
+                            last_countdown_printed = None
+                            latest_sensor_state["gate"] = "CLOSED"
+                        elif "safety lock" in lower_line or "emergency safety" in lower_line:
+                            gate_is_open = True
+                            clear_since = None
+                            last_countdown_printed = None
+                            latest_sensor_state["gate"] = "OPEN"
+
+            # Auto-close timer when gate is open and path is clear
+            if ser and gate_is_open and latest_sensor_state["status"] == 0:
+                if clear_since is None:
+                    clear_since = time.time()
+                elapsed = time.time() - clear_since
+                rem = int(AUTO_CLOSE_DELAY - elapsed) + 1
+                if elapsed >= AUTO_CLOSE_DELAY:
+                    print(f"[AUTO GATE] No obstacle for {AUTO_CLOSE_DELAY:.0f}s -> Sending 'C' (CLOSING GATE)")
+                    ser.write(b"C")
+                    ser.flush()
+                    gate_is_open = False
+                    clear_since = None
+                    last_countdown_printed = None
+                    latest_sensor_state["gate"] = "CLOSED"
+                elif rem != last_countdown_printed:
+                    print(f"[AUTO GATE] Clear -> Closing in {rem}s...")
+                    last_countdown_printed = rem
+
             time.sleep(0.01)
     except KeyboardInterrupt:
         print("\nStopped.")

@@ -22,6 +22,11 @@ type GuestForm = {
     guest_car_model: string;
     guest_car_color: string;
     access_date: string;
+    access_time: string;
+    access_end_date: string;
+    access_end_time: string;
+    valid_until: string;
+    pass_duration: string;
     access_reason: string;
 };
 
@@ -33,7 +38,12 @@ const blankGuestForm: GuestForm = {
     guest_plate_number: "",
     guest_car_model: "",
     guest_car_color: "",
-    access_date: "",
+    access_date: new Date().toISOString().split("T")[0],
+    access_time: "08:00 AM",
+    access_end_date: new Date().toISOString().split("T")[0],
+    access_end_time: "11:59 PM",
+    valid_until: new Date().toISOString().split("T")[0],
+    pass_duration: "1_day",
     access_reason: "",
 };
 
@@ -198,6 +208,29 @@ const ResidentHomePage = () => {
         await GateAccessService.markNotificationRead(id);
         await loadDashboardData();
         window.dispatchEvent(new Event('notifications_updated'));
+    };
+
+    const applyDuration = (duration: string) => {
+        const start = guestForm.access_date ? new Date(guestForm.access_date) : new Date();
+        const end = new Date(start);
+        if (duration === "1_day") {
+            // same date
+        } else if (duration === "1_week") {
+            end.setDate(end.getDate() + 7);
+        } else if (duration === "1_month") {
+            end.setMonth(end.getMonth() + 1);
+        } else if (duration === "6_months") {
+            end.setMonth(end.getMonth() + 6);
+        } else if (duration === "1_year") {
+            end.setFullYear(end.getFullYear() + 1);
+        }
+        const formattedEnd = end.toISOString().split("T")[0];
+        setGuestForm({
+            ...guestForm,
+            pass_duration: duration,
+            access_end_date: formattedEnd,
+            valid_until: formattedEnd,
+        });
     };
 
     const submitGuestAccess = async (event: FormEvent) => {
@@ -504,10 +537,54 @@ const ResidentHomePage = () => {
                         <Field label="Car Color" name="guest_car_color" value={guestForm.guest_car_color} onChange={(value) => setGuestForm({ ...guestForm, guest_car_color: value })} placeholder="White" />
                     </div>
 
-                    <SectionHeading title="Access Details" />
+                    <SectionHeading title="Access Details & Pass Validity" />
+                    <p className="text-xs text-zinc-500 -mt-3">
+                        Security guards issue 1-day gate passes by default. As a resident, you can authorize and extend visits for 1 day, 1 month, or up to 1 year.
+                    </p>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        {[
+                            { label: "1 Day", val: "1_day" },
+                            { label: "1 Week", val: "1_week" },
+                            { label: "1 Month", val: "1_month" },
+                            { label: "6 Months", val: "6_months" },
+                            { label: "1 Year", val: "1_year" },
+                            { label: "Custom Range", val: "custom" },
+                        ].map((d) => (
+                            <button
+                                key={d.val}
+                                type="button"
+                                onClick={() => applyDuration(d.val)}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                                    guestForm.pass_duration === d.val
+                                        ? "bg-emerald-600 text-white shadow-sm"
+                                        : "border border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                                }`}
+                            >
+                                {d.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs font-semibold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 flex items-center gap-2">
+                        <span>✨</span>
+                        <span>
+                            Pass Active: <strong>{guestForm.access_date || "Today"} {guestForm.access_time || "08:00 AM"}</strong> until <strong>{guestForm.access_end_date || guestForm.access_date || "Today"} {guestForm.access_end_time || "11:59 PM"}</strong>
+                        </span>
+                    </div>
+
                     <div className="grid gap-5 md:grid-cols-2">
-                        <Field label="Access Date" name="access_date" type="date" value={guestForm.access_date} onChange={(value) => setGuestForm({ ...guestForm, access_date: value })} required />
-                        <Field label="Reason for Access" name="access_reason" value={guestForm.access_reason} onChange={(value) => setGuestForm({ ...guestForm, access_reason: value })} required textarea placeholder="Family visit, delivery, service provider, etc." />
+                        <Field label="Visit Start Date" name="access_date" type="date" value={guestForm.access_date} onChange={(value) => setGuestForm({ ...guestForm, access_date: value })} required />
+                        <Field label="Start Time" name="access_time" value={guestForm.access_time} onChange={(value) => setGuestForm({ ...guestForm, access_time: value })} placeholder="08:00 AM" />
+                    </div>
+
+                    <div className="grid gap-5 md:grid-cols-2">
+                        <Field label="Valid Until Date" name="access_end_date" type="date" value={guestForm.access_end_date} onChange={(value) => setGuestForm({ ...guestForm, access_end_date: value, valid_until: value, pass_duration: "custom" })} required />
+                        <Field label="End Time" name="access_end_time" value={guestForm.access_end_time} onChange={(value) => setGuestForm({ ...guestForm, access_end_time: value })} placeholder="11:59 PM" />
+                    </div>
+
+                    <div>
+                        <Field label="Reason for Access" name="access_reason" value={guestForm.access_reason} onChange={(value) => setGuestForm({ ...guestForm, access_reason: value })} required textarea placeholder="Family visit, staying for 1 month, delivery, contractor, etc." />
                     </div>
 
                     <button type="submit" disabled={submittingGuest} className="w-full rounded-xl bg-zinc-900 px-6 py-3.5 font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60">

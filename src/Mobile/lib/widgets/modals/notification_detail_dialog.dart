@@ -83,6 +83,7 @@ class _NotificationDetailDialogState
           await ref
               .read(residentServiceProvider)
               .markNotificationRead(widget.notification.id);
+          if (!mounted || _isClosing || _isDeleting) return;
           ref.invalidate(notificationsProvider);
           widget.onMarkedRead?.call();
         } catch (_) {}
@@ -100,8 +101,12 @@ class _NotificationDetailDialogState
   Future<void> _handleClose() async {
     if (_isClosing) return;
     _isClosing = true;
-    await _animController.reverse();
-    if (mounted) Navigator.of(context).pop();
+    try {
+      await _animController.reverse();
+    } catch (_) {}
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
   }
 
   Future<void> _confirmAndDelete() async {
@@ -241,6 +246,7 @@ class _NotificationDetailDialogState
 
     if (confirmed == true && mounted) {
       setState(() => _isDeleting = true);
+      final rootNav = Navigator.of(context, rootNavigator: true);
       try {
         final success = await ref
             .read(residentServiceProvider)
@@ -248,10 +254,12 @@ class _NotificationDetailDialogState
 
         if (mounted) {
           if (success) {
-            ToastHelper.showSuccess(context, 'Notification deleted');
             ref.invalidate(notificationsProvider);
             widget.onDeleted?.call();
             await _handleClose();
+            if (rootNav.context.mounted) {
+              ToastHelper.showSuccess(rootNav.context, 'Notification deleted');
+            }
           } else {
             ToastHelper.showError(context, 'Failed to delete notification');
             setState(() => _isDeleting = false);
@@ -435,9 +443,9 @@ class _NotificationDetailDialogState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ── Header Bar with Trash & Close Buttons ──────────────
+                    // ── Header Bar ─────────────────────────────────────────
                     Padding(
-                      padding: EdgeInsets.fromLTRB(18.w, 16.h, 14.w, 14.h),
+                      padding: EdgeInsets.fromLTRB(18.w, 16.h, 18.w, 14.h),
                       child: Row(
                         children: [
                           Container(
@@ -479,86 +487,6 @@ class _NotificationDetailDialogState
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-
-                          // ── Trash / Delete Icon Button ────────────────────
-                          Tooltip(
-                            message: 'Delete Notification',
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: _isDeleting ? null : _confirmAndDelete,
-                                borderRadius: BorderRadius.circular(20.r),
-                                child: Container(
-                                  width: 34.r,
-                                  height: 34.r,
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? const Color(0xFFEF4444).withValues(alpha: 0.16)
-                                        : const Color(0xFFFEE2E2),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: isDark
-                                          ? const Color(0xFFEF4444).withValues(alpha: 0.35)
-                                          : const Color(0xFFFCA5A5).withValues(alpha: 0.5),
-                                    ),
-                                  ),
-                                  child: _isDeleting
-                                      ? Center(
-                                          child: SizedBox(
-                                            width: 14.r,
-                                            height: 14.r,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: isDark
-                                                  ? const Color(0xFFF87171)
-                                                  : const Color(0xFFDC2626),
-                                            ),
-                                          ),
-                                        )
-                                      : Icon(
-                                          Icons.delete_outline_rounded,
-                                          color: isDark
-                                              ? const Color(0xFFF87171)
-                                              : const Color(0xFFDC2626),
-                                          size: 18.r,
-                                        ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          SizedBox(width: 8.w),
-
-                          // Close icon button
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: _handleClose,
-                              borderRadius: BorderRadius.circular(20.r),
-                              child: Container(
-                                width: 34.r,
-                                height: 34.r,
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : AppColors.surfaceMuted,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.12)
-                                        : Theme.of(context).dividerColor.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  color: isDark
-                                      ? const Color(0xFFCBD5E1)
-                                      : AppColors.textSecondary,
-                                  size: 18.r,
-                                ),
-                              ),
                             ),
                           ),
                         ],

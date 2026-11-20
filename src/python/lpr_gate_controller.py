@@ -24,8 +24,15 @@ try:
     import cv2
     import easyocr
     import numpy as np
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            torch.set_num_threads(os.cpu_count() or 8)
+    except Exception:
+        torch = None
     LPR_AVAILABLE = True
 except ImportError:
+    torch = None
     LPR_AVAILABLE = False
     print("Note: Camera/LPR libraries (cv2, easyocr, numpy) not fully installed.")
     print("      Please install dependencies to enable LPR camera features.")
@@ -80,9 +87,9 @@ API_LOGIN_PATH = os.environ.get("API_LOGIN_PATH", "/auth/admin/login")
 
 # Camera Setup
 # Entrance CCTV RTSP stream (used for LPR at gate entry)
-ENTRANCE_CAMERA_SOURCE = os.environ.get("ESP32_CAM_ENTRANCE_STREAM_URL") or os.environ.get("ESP32_CAM_STREAM_URL") or "rtsp://Capstonecamera:Capstonecamera@192.168.86.38:554/stream2"
+ENTRANCE_CAMERA_SOURCE = os.environ.get("ESP32_CAM_ENTRANCE_STREAM_URL") or os.environ.get("ESP32_CAM_STREAM_URL") or "rtsp://Cameraentrance:Cameraentrance@192.168.254.200:554/stream1"
 # Exit CCTV RTSP stream (used for LPR at gate exit)
-EXIT_CAMERA_SOURCE = os.environ.get("ESP32_CAM_EXIT_STREAM_URL") or "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.86.26:554/stream2"
+EXIT_CAMERA_SOURCE = os.environ.get("ESP32_CAM_EXIT_STREAM_URL") or "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.254.122:554/stream1"
 # Active camera for LPR processing
 CAMERA_SOURCE = ENTRANCE_CAMERA_SOURCE
 
@@ -93,7 +100,10 @@ BAUD_RATE = 9600
 # OCR/LPR Settings
 COOLDOWN_PERIOD = int(os.environ.get("LPR_COOLDOWN_PERIOD", "30"))     
 CONFIDENCE_THRESHOLD = 0.5 
-GATE_AUTO_CLOSE_DELAY = int(os.environ.get("GATE_AUTO_CLOSE_DELAY", "10"))
+GATE_AUTO_CLOSE_DELAY = int(os.environ.get("GATE_AUTO_CLOSE_DELAY", "5"))
+ENABLE_IR_SENSOR = os.environ.get("ENABLE_IR_SENSOR", "true").lower() == "true"   # Monitor IR sensor & interrupt close on obstruction
+IR_PASS_FALLBACK_TIMEOUT = int(os.environ.get("IR_PASS_FALLBACK_TIMEOUT", "10"))
+IR_POST_PASS_DELAY = float(os.environ.get("IR_POST_PASS_DELAY", "2.0"))
 
 # ==========================================
 # GLOBAL STATE & 15 FPS STREAM ENGINE
@@ -108,11 +118,22 @@ last_scanned_plates = {}
 running = True
 lpr_lock = threading.Lock()
 lpr_locks = {"IN": threading.Lock(), "OUT": threading.Lock()}
+cpu_ocr_lock = threading.Lock()  # Prevent IN & OUT CPU OCR threads from thrashing cores simultaneously
 gate_cycle_lock = threading.Lock()
 is_gate_cycling = False
+is_gate_closing = False
 last_plate_seen_time = 0
 gate_opened_event = threading.Event()
 gate_closed_event = threading.Event()
+gate_close_blocked_event = threading.Event()
+gate_reopening_event = threading.Event()
+
+# IR Photocell Sensor State (updated by serial_reader_thread)
+ir_state_lock = threading.Lock()
+ir_sensor_blocked = False
+ir_trigger_seq = 0
+ir_clear_seq = 0
+ir_state_changed_event = threading.Event()
 
 STREAM_TARGET_FPS = 15
 FRAME_INTERVAL = 1.0 / STREAM_TARGET_FPS  # ~0.0667s for 15 FPS
@@ -122,7 +143,12 @@ DISK_SAVE_INTERVAL = 1.0  # Write snapshot to disk only 1/sec instead of 15/sec 
 
 last_motion_thumb = {"IN": None, "OUT": None}
 last_ocr_time = {"IN": 0.0, "OUT": 0.0}
-OCR_MIN_INTERVAL = 0.35   # Max ~2.8 scans/sec when vehicle moves (drops OCR CPU by 70%)
+OCR_MIN_INTERVAL = float(os.environ.get("OCR_MIN_INTERVAL", "0.20"))      # Fast ~5 scans/sec when vehicle approaches
+OCR_MAX_WIDTH = int(os.environ.get("OCR_MAX_WIDTH", "576"))               # 576px width cuts CPU OCR from ~54s to ~1.5s
+OCR_CANVAS_SIZE = int(os.environ.get("OCR_CANVAS_SIZE", "576"))           # EasyOCR CRAFT detector canvas cap
+OCR_ROI_TOP_FRAC = float(os.environ.get("OCR_ROI_TOP_FRAC", "0.25"))      # Skip top 25% (sky/roof/OSD) during OCR
+OCR_ROI_BOTTOM_FRAC = float(os.environ.get("OCR_ROI_BOTTOM_FRAC", "0.95")) # Skip bottom 5% OSD bar during OCR
+_OCR_CLAHE = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)) if LPR_AVAILABLE else None
 
 def detect_motion(frame, direction):
     """Ultra-fast 160x90 thumbnail motion check (<0.1ms). Skips heavy OCR when driveway is empty."""
@@ -236,13 +262,35 @@ def send_arduino_command(cmd):
     else:
         print(f"[Serial Simulation] Arduino received command: '{cmd}' (State: {gate_state.upper()})")
 
+def get_ir_sensor_snapshot():
+    """Returns (blocked, trigger_seq, clear_seq) thread-safely."""
+    with ir_state_lock:
+        return ir_sensor_blocked, ir_trigger_seq, ir_clear_seq
+
+
+def _wait_while_ir_blocked():
+    """Holds the gate open as long as the IR sensor detects a vehicle/obstacle."""
+    blocked, _, _ = get_ir_sensor_snapshot()
+    if not blocked:
+        return
+    print("[GATE CONTROLLER] IR Sensor BLOCKED (Vehicle still passing). Keeping gate OPEN...")
+    while running:
+        ir_state_changed_event.clear()
+        blocked, _, _ = get_ir_sensor_snapshot()
+        if not blocked:
+            break
+        ir_state_changed_event.wait(timeout=0.25)
+    print("[GATE CONTROLLER] IR Sensor CLEAR (Vehicle has cleared the beam).")
+
+
 def trigger_gate_access_cycle(gate_command, hold_seconds=GATE_AUTO_CLOSE_DELAY):
     """
-    Opens the barrier gate upon authorized plate detection,
-    waits until the plate is no longer detected, then waits hold_seconds (10s)
-    and automatically closes the gate.
+    Opens the barrier gate upon authorized plate detection & image capture,
+    waits for the vehicle to pass the IR sensor (1 BLOCKED -> 0 CLEAR) with a
+    safety fallback timeout (default 60s) if no vehicle crosses, and only closes
+    once the IR beam is clear.
     """
-    global is_gate_cycling
+    global is_gate_cycling, gate_state, entrance_gate_state, exit_gate_state
 
     with gate_cycle_lock:
         if is_gate_cycling:
@@ -251,11 +299,13 @@ def trigger_gate_access_cycle(gate_command, hold_seconds=GATE_AUTO_CLOSE_DELAY):
         is_gate_cycling = True
 
     def _cycle():
-        global is_gate_cycling
+        global is_gate_cycling, is_gate_closing, gate_state, entrance_gate_state, exit_gate_state
         try:
             close_cmd = close_command_for_gate(gate_command)
             gate_opened_event.clear()
             gate_closed_event.clear()
+            gate_close_blocked_event.clear()
+            _, start_trigger_seq, _ = get_ir_sensor_snapshot()
 
             print(f"\n========================================================")
             print(f" [GATE CONTROLLER] Plate Authorized -> OPENING GATE ('{gate_command}')")
@@ -267,42 +317,133 @@ def trigger_gate_access_cycle(gate_command, hold_seconds=GATE_AUTO_CLOSE_DELAY):
                 print("[GATE CONTROLLER] Waiting for barrier gate to reach OPEN position (~3s)...")
                 gate_opened_event.wait(timeout=5)
                 print("[GATE CONTROLLER] Barrier gate is fully OPEN.")
+
+                if not ENABLE_IR_SENSOR:
+                    # Pure timer-based auto-close (NO IR sensor included)
+                    print(f"[GATE CONTROLLER] (IR Sensor Disabled) Holding gate OPEN for {hold_seconds}s (Timer Mode)...")
+                    hold_start = time.time()
+                    while running and (time.time() - hold_start) < hold_seconds:
+                        time.sleep(0.5)
+
+                    gate_closed_event.clear()
+                    print(f"\n========================================================")
+                    print(f" [GATE CONTROLLER] Auto-Close Timer Expired -> CLOSING GATE ('{close_cmd}')")
+                    print(f"========================================================")
+                    send_arduino_command(close_cmd)
+                    gate_closed_event.wait(timeout=5)
+                    sync_gate_status_with_laravel("closed")
+                    print("[GATE CONTROLLER] Barrier gate is fully CLOSED.")
+                else:
+                    # Wait for vehicle to cross IR sensor (1 BLOCKED -> 0 CLEAR), with fallback timeout
+                    ir_passed = False
+                    ir_started = False
+                    wait_start = time.time()
+                    last_status_log = wait_start
+
+                    print(f"[GATE CONTROLLER] Monitoring IR sensor: keeping gate OPEN until vehicle passes (fallback timeout: {IR_PASS_FALLBACK_TIMEOUT}s)...")
+                    while running:
+                        ir_state_changed_event.clear()
+                        blocked, trig_seq, _ = get_ir_sensor_snapshot()
+
+                        if blocked or trig_seq > start_trigger_seq:
+                            ir_started = True
+
+                        if ir_started:
+                            # Hold open while IR beam is broken
+                            if blocked:
+                                _wait_while_ir_blocked()
+
+                            # Confirm beam stays clear for IR_POST_PASS_DELAY before closing
+                            print(f"[GATE CONTROLLER] Vehicle passed IR sensor. Verifying clear path for {IR_POST_PASS_DELAY:.1f}s...")
+                            clear_deadline = time.time() + IR_POST_PASS_DELAY
+                            reblocked = False
+                            while running and time.time() < clear_deadline:
+                                blocked_now, _, _ = get_ir_sensor_snapshot()
+                                if blocked_now:
+                                    reblocked = True
+                                    break
+                                time.sleep(0.1)
+
+                            if reblocked:
+                                print("[GATE CONTROLLER] IR sensor triggered again! Holding gate OPEN...")
+                                continue
+
+                            ir_passed = True
+                            break
+
+                        # If plate is still actively visible in camera, keep extending the fallback deadline
+                        if (time.time() - last_plate_seen_time) < 2.0:
+                            wait_start = time.time()
+
+                        elapsed = time.time() - wait_start
+                        if elapsed >= IR_PASS_FALLBACK_TIMEOUT:
+                            print(f"[GATE CONTROLLER] Fallback timeout ({IR_PASS_FALLBACK_TIMEOUT}s) reached with no vehicle crossing IR sensor.")
+                            break
+
+                        if (time.time() - last_status_log) >= 10.0:
+                            rem = max(0, int(IR_PASS_FALLBACK_TIMEOUT - elapsed))
+                            print(f"[GATE CONTROLLER] Vehicle has not passed IR sensor yet — keeping gate OPEN (fallback in {rem}s)...")
+                            last_status_log = time.time()
+
+                        ir_state_changed_event.wait(timeout=0.25)
+
+                    # Close gate and interrupt immediately if IR sensor detects obstruction while closing
+                    while running:
+                        _wait_while_ir_blocked()
+                        gate_closed_event.clear()
+                        gate_close_blocked_event.clear()
+                        gate_reopening_event.clear()
+
+                        reason = "Vehicle Passed IR Sensor" if ir_passed else "Fallback Timeout Expired"
+                        print(f"\n========================================================")
+                        print(f" [GATE CONTROLLER] {reason} -> CLOSING GATE ('{close_cmd}')")
+                        print(f"========================================================")
+                        is_gate_closing = True
+                        send_arduino_command(close_cmd)
+
+                        # Wait for Gate Closed confirmation; interrupt immediately if IR obstruction occurs
+                        deadline = time.time() + 5.0
+                        while running and time.time() < deadline:
+                            if gate_closed_event.is_set() or gate_close_blocked_event.is_set():
+                                break
+                            if get_ir_sensor_snapshot()[0]:
+                                print("[GATE CONTROLLER] IR obstruction detected while closing -> Interrupting close ('S')!")
+                                send_arduino_command('S')
+                                gate_close_blocked_event.set()
+                                break
+                            time.sleep(0.05)
+
+                        is_gate_closing = False
+
+                        if gate_close_blocked_event.is_set():
+                            print("[GATE CONTROLLER] Gate closing INTERRUPTED due to IR obstruction! Keeping gate OPEN until clear...")
+                            if close_cmd == 'C':
+                                entrance_gate_state = "open"
+                            else:
+                                exit_gate_state = "open"
+                            gate_state = "open"
+                            sync_gate_status_with_laravel("open")
+                            if gate_reopening_event.is_set():
+                                gate_opened_event.wait(timeout=4)
+                                gate_reopening_event.clear()
+                            _wait_while_ir_blocked()
+                            time.sleep(IR_POST_PASS_DELAY)
+                            ir_passed = True
+                            continue
+
+                        sync_gate_status_with_laravel("closed")
+                        print("[GATE CONTROLLER] Barrier gate is fully CLOSED.")
+                        break
             else:
                 print("[GATE CONTROLLER] [Simulation] Gate is now OPEN.")
-
-            # Check if vehicle / plate is currently in camera view
-            if (time.time() - last_plate_seen_time) < 2.0:
-                print("[GATE CONTROLLER] Vehicle/Plate currently visible in front of gate. Holding gate open...")
-                while (time.time() - last_plate_seen_time) < 2.0:
-                    time.sleep(0.5)
-                print("[GATE CONTROLLER] Plate is NO LONGER DETECTED (Vehicle has cleared gate).")
-
-            print(f"[GATE CONTROLLER] Waiting {hold_seconds} seconds before closing barrier gate...")
-            remaining = hold_seconds
-            while remaining > 0:
-                time.sleep(1)
-                remaining -= 1
-                # If plate reappears in front of camera during the countdown, hold open
-                if (time.time() - last_plate_seen_time) < 1.5:
-                    print("[GATE CONTROLLER] Plate detected again! Pausing close timer...")
+                if (time.time() - last_plate_seen_time) < 2.0:
+                    print("[GATE CONTROLLER] [Simulation] Vehicle/Plate visible. Holding gate open...")
                     while (time.time() - last_plate_seen_time) < 2.0:
                         time.sleep(0.5)
-                    print(f"[GATE CONTROLLER] Plate cleared again. Restarting {hold_seconds}s countdown...")
-                    remaining = hold_seconds
-                if remaining in (10, 5, 3, 2, 1):
-                    print(f"[GATE CONTROLLER] Auto-closing in {remaining}s...")
-
-            print(f"\n========================================================")
-            print(f" [GATE CONTROLLER] Timer Expired -> CLOSING GATE ('{close_cmd}')")
-            print(f"========================================================")
-            # Send close command and immediately sync closed status to backend
-            send_arduino_command(close_cmd)
-            sync_gate_status_with_laravel("closed")
-
-            if arduino and arduino.is_open:
-                print("[GATE CONTROLLER] Waiting for barrier gate to reach CLOSED position (~3s)...")
-                gate_closed_event.wait(timeout=5)
-                print("[GATE CONTROLLER] Barrier gate is fully CLOSED.")
+                print(f"[GATE CONTROLLER] [Simulation] Waiting {hold_seconds} seconds before closing barrier gate...")
+                time.sleep(hold_seconds)
+                send_arduino_command(close_cmd)
+                sync_gate_status_with_laravel("closed")
 
             print("[GATE CONTROLLER] Gate cycle complete. Barrier arm safely CLOSED.\n")
         except Exception as e:
@@ -617,14 +758,14 @@ def merge_adjacent_ocr_boxes(results):
 
 def detect_full_frame_plate_regions(frame):
     """
-    Locate rectangular license-plate candidate regions anywhere across the full frame
-    using bilateral filtering, Sobel-X vertical edges, Otsu thresholding, and morphology.
+    Locate rectangular license-plate candidate regions using fast Gaussian blur,
+    Sobel-X vertical edges, Otsu thresholding, and morphology.
     """
     if not LPR_AVAILABLE or frame is None:
         return []
     h, w = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.bilateralFilter(gray, 9, 75, 75)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
     grad_x = cv2.Sobel(blur, cv2.CV_16S, 1, 0, ksize=3)
     abs_grad_x = cv2.convertScaleAbs(grad_x)
     _, thresh = cv2.threshold(abs_grad_x, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -1055,6 +1196,12 @@ def process_plate_verification(plate_number, frame=None, direction="IN", plate_b
                     det["car"] = car_info
                     det["logged_at"] = entry_ts
 
+            if frame is not None and LPR_AVAILABLE:
+                if not is_exit:
+                    save_vehicle_and_plate_capture(frame, plate_box, plate_number, direction=direction)
+                else:
+                    save_exit_registered_capture(frame, plate_box, plate_number)
+
             gate_cmd = 'X' if resolved_dir == 'OUT' else 'O'
             action_label = "EXIT" if resolved_dir == "OUT" else "ENTRY"
             print(f"========================================================")
@@ -1065,11 +1212,9 @@ def process_plate_verification(plate_number, frame=None, direction="IN", plate_b
             gate_opened_from_whitelist = True
 
     if frame is not None and LPR_AVAILABLE:
-        # Entrance only: save car and plate captures as usual
-        if not is_exit:
+        # Entrance only: save car and plate captures if not already saved above
+        if not is_exit and not gate_opened_from_whitelist:
             save_vehicle_and_plate_capture(frame, plate_box, plate_number, direction=direction)
-        elif gate_opened_from_whitelist:
-            save_exit_registered_capture(frame, plate_box, plate_number)
 
         try:
             # Lightweight upload (~35KB instead of 2.5MB) to prevent PHP timeout on verification
@@ -1270,9 +1415,9 @@ def draw_anpr_hud(frame, direction):
 
 lpr_busy = {"IN": False, "OUT": False}
 
-def _evaluate_ocr_detections(results, ocr_scale, frame_w, frame_h, direction):
+def _evaluate_ocr_detections(results, ocr_scale, frame_w, frame_h, direction, y_offset=0):
     """
-    Evaluate raw and adjacently-merged EasyOCR detections from a full frame,
+    Evaluate raw and adjacently-merged EasyOCR detections from the OCR ROI frame,
     filtering out HUD zones, OSD words, and invalid formats, and returning the
     best valid candidate (plate, variants, conf, [bx1, by1, bx2, by2], raw_text).
     """
@@ -1287,9 +1432,9 @@ def _evaluate_ocr_detections(results, ocr_scale, frame_w, frame_h, direction):
 
     for (bbox, text, prob) in merged_results:
         bx1 = int(min(pt[0] for pt in bbox) * inv_scale)
-        by1 = int(min(pt[1] for pt in bbox) * inv_scale)
+        by1 = int(min(pt[1] for pt in bbox) * inv_scale) + y_offset
         bx2 = int(max(pt[0] for pt in bbox) * inv_scale)
-        by2 = int(max(pt[1] for pt in bbox) * inv_scale)
+        by2 = int(max(pt[1] for pt in bbox) * inv_scale) + y_offset
 
         # Ignore top/bottom HUD bar zones
         if by1 < 36 or by2 > max(40, frame_h - 24):
@@ -1335,46 +1480,61 @@ def _evaluate_ocr_detections(results, ocr_scale, frame_w, frame_h, direction):
 
 def process_ocr_thread(frame, reader, direction):
     global last_scanned_plates, lpr_busy, last_plate_seen_time, last_ocr_time
-    dir_lock = lpr_locks.get(direction, lpr_lock)
+    use_cpu_lock = (torch is None) or (not torch.cuda.is_available())
+    dir_lock = cpu_ocr_lock if use_cpu_lock else lpr_locks.get(direction, lpr_lock)
     try:
         h, w = frame.shape[:2]
-        # Scale full frame to max width 1280 to preserve distant plate detail across the whole CCTV view
-        ocr_scale = 1.0
-        if w > 1280:
-            ocr_scale = 1280.0 / w
-            ocr_w = 1280
-            ocr_h = int(h * ocr_scale)
-            ocr_frame = cv2.resize(frame, (ocr_w, ocr_h), interpolation=cv2.INTER_AREA)
-        else:
-            ocr_frame = frame
 
-        # CLAHE contrast enhancement for full-frame recognition across varying lighting
-        gray_full = cv2.cvtColor(ocr_frame, cv2.COLOR_BGR2GRAY)
-        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-        enhanced_full = clahe.apply(gray_full)
+        # Crop top sky/roof and bottom OSD bar via configurable ROI fractions for faster OCR
+        roi_frac = max(0.0, min(0.6, OCR_ROI_TOP_FRAC))
+        bot_frac = max(roi_frac + 0.2, min(1.0, OCR_ROI_BOTTOM_FRAC))
+        roi_y1 = int(h * roi_frac)
+        roi_y2 = int(h * bot_frac)
+        if (roi_y2 - roi_y1) < 120:
+            roi_y1, roi_y2 = 0, h
+        roi_frame = frame[roi_y1:roi_y2, :]
+
+        # Scale ROI frame to max width OCR_MAX_WIDTH (default 576) for fast EasyOCR inference
+        ocr_scale = 1.0
+        if w > OCR_MAX_WIDTH:
+            ocr_scale = OCR_MAX_WIDTH / float(w)
+            ocr_w = OCR_MAX_WIDTH
+            ocr_h = max(1, int(roi_frame.shape[0] * ocr_scale))
+            ocr_frame = cv2.resize(roi_frame, (ocr_w, ocr_h), interpolation=cv2.INTER_AREA)
+        else:
+            ocr_frame = roi_frame
+
+        # CLAHE contrast enhancement for recognition across varying lighting
+        gray_roi = cv2.cvtColor(ocr_frame, cv2.COLOR_BGR2GRAY)
+        clahe = _OCR_CLAHE or cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        enhanced_roi = clahe.apply(gray_roi)
 
         with dir_lock:
-            results = reader.readtext(enhanced_full, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ')
+            results = reader.readtext(
+                enhanced_roi,
+                allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ',
+                canvas_size=OCR_CANVAS_SIZE,
+                mag_ratio=1.0,
+            )
 
         best_plate, best_variants, best_conf, best_box, best_raw = _evaluate_ocr_detections(
-            results, ocr_scale, w, h, direction
+            results, ocr_scale, w, h, direction, y_offset=roi_y1
         )
 
-        # Skip fallback crops if full-frame already matched a registered plate in the local whitelist
+        # Skip fallback crops if ROI already matched a whitelisted plate, reached high conf, or gate is already cycling
         already_whitelisted = bool(best_plate and check_plate_in_database(best_plate, allow_network=False)[0])
 
-        # Fallback: inspect top 2 cropped plate candidate regions if full frame didn't find a high-confidence or whitelisted plate
-        if not already_whitelisted and (best_plate is None or best_conf < 0.65):
-            regions = detect_full_frame_plate_regions(frame)[:2]
-            contour_crop, contour_box = preprocess_plate_contour(frame)
-            if contour_box is not None:
-                cbx1, cby1, cbx2, cby2 = contour_box
-                if cbx2 > cbx1 and cby2 > cby1:
-                    regions.insert(0, (cbx1, cby1, cbx2, cby2))
-                    regions = regions[:2]
+        # Fast single-crop fallback only when a partial plate was found with low confidence (avoids wasting CPU on empty frames)
+        if not is_gate_cycling and not already_whitelisted and best_plate is not None and best_conf < 0.65:
+            inv_scale = 1.0 / ocr_scale
+            regions = detect_full_frame_plate_regions(ocr_frame)[:1]
 
-            for (rx1, ry1, rx2, ry2) in regions:
-                if ry1 < 36 or ry2 > max(40, h - 24):
+            for (srx1, sry1, srx2, sry2) in regions:
+                rx1 = max(0, int(srx1 * inv_scale))
+                ry1 = max(0, int(sry1 * inv_scale) + roi_y1)
+                rx2 = min(w, int(srx2 * inv_scale))
+                ry2 = min(h, int(sry2 * inv_scale) + roi_y1)
+                if ry1 < 36 or ry2 > max(40, h - 24) or rx2 <= rx1 or ry2 <= ry1:
                     continue
                 crop = frame[ry1:ry2, rx1:rx2]
                 if crop is None or crop.size == 0:
@@ -1384,7 +1544,12 @@ def process_ocr_thread(frame, reader, direction):
                 crop_enh = clahe.apply(crop_up)
 
                 with dir_lock:
-                    crop_results = reader.readtext(crop_enh, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ')
+                    crop_results = reader.readtext(
+                        crop_enh,
+                        allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ',
+                        canvas_size=640,
+                        mag_ratio=1.0,
+                    )
 
                 for (cbbox, ctext, cprob) in merge_adjacent_ocr_boxes(crop_results):
                     cclean = clean_plate_text(ctext)
@@ -1531,7 +1696,8 @@ def process_lpr_frame(frame, reader, direction):
     # 2. Run OCR in background with smart motion-gating & throttling
     if not lpr_busy.get(direction, False) and reader is not None and LPR_AVAILABLE:
         time_since_ocr = current_time - last_ocr_time.get(direction, 0.0)
-        if time_since_ocr >= OCR_MIN_INTERVAL:
+        ocr_interval = 1.0 if is_gate_cycling else OCR_MIN_INTERVAL
+        if time_since_ocr >= ocr_interval:
             motion_active = detect_motion(frame, direction)
             # Run OCR if there's motion/vehicle activity, or periodically every 2.0s to confirm standing cars
             if motion_active or time_since_ocr >= 2.0:
@@ -1891,8 +2057,9 @@ def lpr_main(camera_source, direction):
 # SERIAL READER & SYNC THREADS
 # ==========================================
 def serial_reader_thread():
-    """Background thread that listens for signals sent by the Arduino (e.g. vehicle passed, blocked)."""
+    """Background thread that listens for signals sent by the Arduino (e.g. vehicle passed, IR sensor, blocked)."""
     global running, gate_state, entrance_gate_state, exit_gate_state, arduino
+    global ir_sensor_blocked, ir_trigger_seq, ir_clear_seq
     print("Serial reader background thread started.")
     _last_serial_err_time = 0
     _serial_err_count = 0
@@ -1907,7 +2074,62 @@ def serial_reader_thread():
                     _serial_err_count = 0  # Reset on successful read
                     
                     print(f"[Arduino -> Serial] {line}")
-                    
+                    lower_line = line.lower()
+
+                    is_ir_clear_msg = (
+                        line == "0"
+                        or line.startswith("0 ")
+                        or line.startswith("0\t")
+                        or "not blocked" in lower_line
+                        or "beam intact" in lower_line
+                        or "path clear" in lower_line
+                        or "relay open" in lower_line
+                    )
+                    is_ir_blocked_msg = (
+                        not is_ir_clear_msg
+                        and (
+                            line == "1"
+                            or line.startswith("1 ")
+                            or line.startswith("1\t")
+                            or "(blocked" in lower_line
+                            or line == "blocked"
+                            or "beam broken" in lower_line
+                            or "obstacle detected" in lower_line
+                            or "relay closed" in lower_line
+                        )
+                    )
+
+                    if ENABLE_IR_SENSOR:
+                        if is_ir_blocked_msg:
+                            with ir_state_lock:
+                                ir_sensor_blocked = True
+                                ir_trigger_seq += 1
+                            ir_state_changed_event.set()
+                            print("[IR Sensor] 1 - BLOCKED (Vehicle/Obstacle in doorway)")
+                            if is_gate_closing:
+                                send_arduino_command('S')
+                                gate_close_blocked_event.set()
+                                entrance_gate_state = "open"
+                                gate_state = "open"
+                                print("[IR Safety] Obstruction detected while closing -> INTERRUPTED closing ('S')!")
+                                sync_gate_status_with_laravel("open")
+                        elif is_ir_clear_msg:
+                            with ir_state_lock:
+                                ir_sensor_blocked = False
+                                ir_clear_seq += 1
+                            ir_state_changed_event.set()
+                            print("[IR Sensor] 0 - CLEAR (Path unobstructed)")
+
+                        if "safety lock" in lower_line or "emergency safety" in lower_line or line == "BLOCKED":
+                            if "emergency safety" in lower_line:
+                                gate_opened_event.clear()
+                                gate_reopening_event.set()
+                            gate_close_blocked_event.set()
+                            entrance_gate_state = "open"
+                            gate_state = "open"
+                            print("[IR Safety] Gate close interrupted by Arduino IR sensor!")
+                            sync_gate_status_with_laravel("open")
+
                     if "Gate Open!" in line:
                         gate_opened_event.set()
                         entrance_gate_state = "open"
@@ -1920,18 +2142,23 @@ def serial_reader_thread():
                         gate_state = "closed"
                         sync_gate_status_with_laravel("closed")
                     elif line == "PASSED":
+                        with ir_state_lock:
+                            ir_sensor_blocked = False
+                            ir_clear_seq += 1
+                        ir_state_changed_event.set()
                         print("Vehicle successfully passed entrance. Updating gate status to closed...")
                         entrance_gate_state = "closed"
                         gate_state = "closed" if exit_gate_state == "closed" else "open"
                         sync_gate_status_with_laravel("closed")
                     elif line == "EXIT_PASSED":
+                        with ir_state_lock:
+                            ir_sensor_blocked = False
+                            ir_clear_seq += 1
+                        ir_state_changed_event.set()
                         print("Vehicle successfully passed exit. Updating gate status to closed...")
                         exit_gate_state = "closed"
                         gate_state = "closed" if entrance_gate_state == "closed" else "open"
                         sync_gate_status_with_laravel("closed")
-                    elif line == "BLOCKED":
-                        print("WARNING: Gate close attempt blocked! Vehicle still under the gate.")
-                        sync_gate_status_with_laravel("open")
                     elif line.startswith("STATUS:"):
                         status = line.split(":")[1].lower()
                         if status in ["open", "closed"]:

@@ -22,8 +22,22 @@ class _ResidentUpdatesScreenState
     extends ConsumerState<ResidentUpdatesScreen> {
   final List<_UpdatesGuestEntry> _guestEntries = [_UpdatesGuestEntry()];
   final _reasonCtrl = TextEditingController();
+  final _dateCtrl = TextEditingController();
+  final _timeCtrl = TextEditingController(text: '08:00 AM');
+  final _endDateCtrl = TextEditingController();
+  final _endTimeCtrl = TextEditingController(text: '11:59 PM');
+  String _selectedDuration = '1_day';
 
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _dateCtrl.text =
+        "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    _endDateCtrl.text = _dateCtrl.text;
+  }
 
   @override
   void dispose() {
@@ -31,7 +45,201 @@ class _ResidentUpdatesScreenState
       e.dispose();
     }
     _reasonCtrl.dispose();
+    _dateCtrl.dispose();
+    _timeCtrl.dispose();
+    _endDateCtrl.dispose();
+    _endTimeCtrl.dispose();
     super.dispose();
+  }
+
+  DateTime _parseStartDate() {
+    if (_dateCtrl.text.isNotEmpty) {
+      try {
+        return DateTime.parse(_dateCtrl.text);
+      } catch (_) {}
+    }
+    return DateTime.now();
+  }
+
+  void _applyDuration(String duration) {
+    final start = _parseStartDate();
+    DateTime end = start;
+
+    switch (duration) {
+      case '1_day':
+        end = start;
+        break;
+      case '1_week':
+        end = start.add(const Duration(days: 7));
+        break;
+      case '1_month':
+        end = DateTime(start.year, start.month + 1, start.day);
+        break;
+      case '6_months':
+        end = DateTime(start.year, start.month + 6, start.day);
+        break;
+      case '1_year':
+        end = DateTime(start.year + 1, start.month, start.day);
+        break;
+      case 'custom':
+        break;
+    }
+
+    setState(() {
+      _selectedDuration = duration;
+      if (duration != 'custom') {
+        _endDateCtrl.text =
+            "${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}";
+      }
+    });
+
+    if (duration == 'custom') {
+      _pickEndDate();
+    }
+  }
+
+  String _formatTimeOfDay(TimeOfDay tod) {
+    final hour = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
+    final minute = tod.minute.toString().padLeft(2, '0');
+    final period = tod.period == DayPeriod.am ? 'AM' : 'PM';
+    return '${hour.toString().padLeft(2, '0')}:$minute $period';
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    DateTime initial = now;
+    if (_dateCtrl.text.isNotEmpty) {
+      try {
+        final parsed = DateTime.parse(_dateCtrl.text);
+        if (!parsed.isBefore(DateTime(now.year, now.month, now.day))) {
+          initial = parsed;
+        }
+      } catch (_) {}
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 5),
+    );
+
+    if (picked != null) {
+      final formatted =
+          "${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      setState(() {
+        _dateCtrl.text = formatted;
+        if (_selectedDuration != 'custom') {
+          _applyDuration(_selectedDuration);
+        } else {
+          if (_endDateCtrl.text.isNotEmpty) {
+            try {
+              final end = DateTime.parse(_endDateCtrl.text);
+              if (end.isBefore(picked)) {
+                _endDateCtrl.text = formatted;
+              }
+            } catch (_) {
+              _endDateCtrl.text = formatted;
+            }
+          }
+        }
+      });
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 8, minute: 0),
+    );
+    if (picked != null) {
+      setState(() {
+        _timeCtrl.text = _formatTimeOfDay(picked);
+      });
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final start = _parseStartDate();
+    DateTime initial = start;
+    if (_endDateCtrl.text.isNotEmpty) {
+      try {
+        final parsed = DateTime.parse(_endDateCtrl.text);
+        if (!parsed.isBefore(start)) {
+          initial = parsed;
+        }
+      } catch (_) {}
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: start,
+      lastDate: DateTime(start.year + 5),
+    );
+
+    if (picked != null) {
+      final formatted =
+          "${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      setState(() {
+        _endDateCtrl.text = formatted;
+        _selectedDuration = 'custom';
+      });
+    }
+  }
+
+  Future<void> _pickEndTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 23, minute: 59),
+    );
+    if (picked != null) {
+      setState(() {
+        _endTimeCtrl.text = _formatTimeOfDay(picked);
+      });
+    }
+  }
+
+  Widget _buildDurationChip(String label, String key, IconData icon) {
+    final isSelected = _selectedDuration == key;
+    return InkWell(
+      onTap: () => _applyDuration(key),
+      borderRadius: BorderRadius.circular(8.r),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary
+              : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(8.r),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary
+                : Theme.of(context).dividerColor,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13.r,
+              color: isSelected ? Colors.white : AppColors.textSecondary,
+            ),
+            SizedBox(width: 4.w),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.sp,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _submitGuestAccess() async {
@@ -68,6 +276,16 @@ class _ResidentUpdatesScreenState
         'request_type': 'guest_access',
         'guest_name': primary['name'],
         'guest_plate_number': primary['plate_number'],
+        'access_date': _dateCtrl.text.trim(),
+        'access_time': _timeCtrl.text.trim(),
+        'access_end_date': _endDateCtrl.text.trim().isNotEmpty
+            ? _endDateCtrl.text.trim()
+            : _dateCtrl.text.trim(),
+        'access_end_time': _endTimeCtrl.text.trim(),
+        'valid_until': _endDateCtrl.text.trim().isNotEmpty
+            ? _endDateCtrl.text.trim()
+            : _dateCtrl.text.trim(),
+        'pass_duration': _selectedDuration,
         'access_reason': _reasonCtrl.text.trim().isEmpty
             ? 'Visitor Access'
             : _reasonCtrl.text.trim(),
@@ -80,6 +298,13 @@ class _ResidentUpdatesScreenState
       _guestEntries.clear();
       _guestEntries.add(_UpdatesGuestEntry());
       _reasonCtrl.clear();
+      final now = DateTime.now();
+      _dateCtrl.text =
+          "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      _timeCtrl.text = '08:00 AM';
+      _endDateCtrl.text = _dateCtrl.text;
+      _endTimeCtrl.text = '11:59 PM';
+      _selectedDuration = '1_day';
 
       if (mounted) {
         final count = guestsData.length;
@@ -295,13 +520,150 @@ class _ResidentUpdatesScreenState
                     ),
                   ),
                 ),
+                SizedBox(height: 14.h),
+
+                Text(
+                  'Access Details & Pass Validity',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 3.h),
+                Text(
+                  'Guards issue 1-day passes by default. Residents can authorize visits for 1 day, 1 month, or up to 1 year.',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: 10.h),
+
+                // Quick Duration Presets
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildDurationChip('1 Day', '1_day', Icons.today_rounded),
+                      SizedBox(width: 6.w),
+                      _buildDurationChip('1 Week', '1_week', Icons.date_range_rounded),
+                      SizedBox(width: 6.w),
+                      _buildDurationChip('1 Month', '1_month', Icons.calendar_month_rounded),
+                      SizedBox(width: 6.w),
+                      _buildDurationChip('6 Months', '6_months', Icons.event_repeat_rounded),
+                      SizedBox(width: 6.w),
+                      _buildDurationChip('1 Year', '1_year', Icons.verified_user_rounded),
+                      SizedBox(width: 6.w),
+                      _buildDurationChip('Custom', 'custom', Icons.edit_calendar_rounded),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 10.h),
+
+                // Active pass validity badge
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withAlpha(16),
+                    borderRadius: BorderRadius.circular(10.r),
+                    border: Border.all(color: const Color(0xFF10B981).withAlpha(60)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.verified_rounded,
+                        size: 15.r,
+                        color: const Color(0xFF10B981),
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: Text(
+                          'Pass Active: ${_dateCtrl.text.isNotEmpty ? _dateCtrl.text : "Today"} ${_timeCtrl.text} → ${_endDateCtrl.text.isNotEmpty ? _endDateCtrl.text : (_dateCtrl.text.isNotEmpty ? _dateCtrl.text : "Today")} ${_endTimeCtrl.text}',
+                          style: TextStyle(
+                            fontSize: 11.sp,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF059669),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 SizedBox(height: 12.h),
+
+                // Start Date & Time
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _dateCtrl,
+                        readOnly: true,
+                        onTap: _pickDate,
+                        decoration: InputDecoration(
+                          labelText: 'Start Date *',
+                          hintText: 'Select date',
+                          prefixIcon: const Icon(Icons.calendar_today_rounded, size: 18),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _timeCtrl,
+                        readOnly: true,
+                        onTap: _pickTime,
+                        decoration: InputDecoration(
+                          labelText: 'Time *',
+                          hintText: '08:00 AM',
+                          prefixIcon: const Icon(Icons.access_time_rounded, size: 18),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10.h),
+
+                // Valid Until Date & Time
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _endDateCtrl,
+                        readOnly: true,
+                        onTap: _pickEndDate,
+                        decoration: InputDecoration(
+                          labelText: 'Valid Until *',
+                          hintText: 'End date',
+                          prefixIcon: const Icon(Icons.event_available_rounded, size: 18),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _endTimeCtrl,
+                        readOnly: true,
+                        onTap: _pickEndTime,
+                        decoration: InputDecoration(
+                          labelText: 'End Time *',
+                          hintText: '11:59 PM',
+                          prefixIcon: const Icon(Icons.access_time_filled_rounded, size: 18),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10.h),
 
                 TextField(
                   controller: _reasonCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Reason for Visit (All Guests)',
-                    hintText: 'Family gathering / Delivery',
+                    hintText: 'Family gathering / 1 Month stay / Delivery',
                     prefixIcon: Icon(Icons.notes_rounded, size: 18),
                   ),
                 ),

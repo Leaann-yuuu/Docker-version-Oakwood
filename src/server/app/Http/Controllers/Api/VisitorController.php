@@ -369,8 +369,8 @@ class VisitorController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        if (!in_array($visitorRequest->status, ['PENDING', 'APPROVED', 'CONFIRMED'])) {
-            return response()->json(['message' => "Cannot cancel a request that is {$visitorRequest->status}."], 422);
+        if (in_array($visitorRequest->status, ['DENIED', 'REJECTED', 'CANCELLED'], true)) {
+            return response()->json(['message' => "Request is already {$visitorRequest->status}."], 422);
         }
 
         $visitorRequest->update([
@@ -378,10 +378,151 @@ class VisitorController extends Controller
             'notes' => $visitorRequest->notes ? "{$visitorRequest->notes} [Cancelled by resident]" : "[Cancelled by resident]",
         ]);
 
+        $this->revokeLinkedUpdateRequest($visitorRequest, 'Cancelled by resident');
+
+        ActivityLogService::record('resident_visitor_pass_cancelled', $user->username, $user->user_id, $request, [
+            'request_id' => $visitorRequest->request_id,
+        ]);
+
         return response()->json([
             'message' => 'Visitor request cancelled successfully.',
-            'request' => $visitorRequest->fresh(['visitor']),
+            'request' => $visitorRequest->fresh(['visitor', 'securityGuard']),
         ]);
+    }
+
+    /**
+     * Delete a visitor pass anytime by the resident.
+     */
+    public function residentDelete(Request $request, $id): JsonResponse
+    {
+        $visitorRequest = VisitorRequest::with('visitor')->findOrFail($id);
+        $user = $request->user();
+
+        if ($visitorRequest->resident_id !== $user->user_id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $visitorName = $visitorRequest->visitor?->full_name ?? 'Visitor';
+
+        $this->revokeLinkedUpdateRequest($visitorRequest, 'Deleted by resident');
+
+        $visitorRequest->delete();
+
+        ActivityLogService::record('resident_visitor_pass_deleted', $user->username, $user->user_id, $request, [
+            'request_id' => (int) $id,
+            'visitor' => $visitorName,
+        ]);
+
+        return response()->json([
+            'message' => 'Visitor pass deleted successfully.',
+        ]);
+    }
+
+    /**
+     * Delete a visitor request record by a security guard or admin.
+     */
+    public function guardDelete(Request $request, $id): JsonResponse
+    {
+        $visitorRequest = VisitorRequest::with('visitor')->findOrFail($id);
+        $user = $request->user();
+        $visitorName = $visitorRequest->visitor?->full_name ?? 'Visitor';
+        $status = $visitorRequest->status;
+
+        $this->revokeLinkedUpdateRequest(
+            $visitorRequest,
+            'Deleted by ' . ($user?->role === 'admin' ? 'admin' : 'security guard')
+        );
+
+        $visitorRequest->delete();
+
+        ActivityLogService::record('guard_visitor_request_deleted', $user?->username ?? 'guard', $user?->user_id, $request, [
+            'request_id' => (int) $id,
+            'visitor' => $visitorName,
+            'status' => $status,
+        ]);
+
+        return response()->json([
+            'message' => 'Visitor record deleted successfully.',
+        ]);
+    }
+
+    /**
+     * Extend the duration of stay (visit_end_date) for a resident's visitor pass.
+     */
+    public function residentExtendDuration(Request $request, $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'add_days' => 'nullable|integer|min:1|max:30',
+            'visit_end_date' => 'nullable|date',
+        ]);
+
+        if (empty($validated['add_days']) && empty($validated['visit_end_date'])) {
+            return response()->json(['message' => 'Please provide add_days or visit_end_date.'], 422);
+        }
+
+        $visitorRequest = VisitorRequest::with(['visitor', 'resident', 'securityGuard'])->findOrFail($id);
+        $user = $request->user();
+
+        if ($visitorRequest->resident_id !== $user->user_id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        if (in_array($visitorRequest->status, ['DENIED', 'REJECTED', 'CANCELLED'], true)) {
+            return response()->json(['message' => "Cannot extend a {$visitorRequest->status} visitor pass."], 422);
+        }
+
+        $startDate = \Carbon\Carbon::parse($visitorRequest->visit_date)->toDateString();
+        $currentEnd = $visitorRequest->visit_end_date
+            ? \Carbon\Carbon::parse($visitorRequest->visit_end_date)->toDateString()
+            : $startDate;
+
+        if (! empty($validated['visit_end_date'])) {
+            $newEndDate = \Carbon\Carbon::parse($validated['visit_end_date'])->toDateString();
+            if ($newEndDate < $startDate) {
+                return response()->json(['message' => 'End date cannot be earlier than the visit start date.'], 422);
+            }
+        } else {
+            $baseDate = max($currentEnd, now()->toDateString());
+            $newEndDate = \Carbon\Carbon::parse($baseDate)->addDays((int) $validated['add_days'])->toDateString();
+        }
+
+        $visitorRequest->update([
+            'visit_end_date' => $newEndDate,
+        ]);
+
+        // Sync linked guest_access UpdateRequest if present
+        if (! empty($visitorRequest->notes) && preg_match('/\[UpdateReq ID:\s*(\d+)\]/', $visitorRequest->notes, $matches)) {
+            $updateReq = UpdateRequest::find((int) $matches[1]);
+            if ($updateReq) {
+                $changes = $updateReq->requested_changes ?? [];
+                $changes['access_end_date'] = $newEndDate;
+                $changes['valid_until'] = $newEndDate;
+                $updateReq->update(['requested_changes' => $changes]);
+            }
+        }
+
+        ActivityLogService::record('resident_visitor_duration_extended', $user->username, $user->user_id, $request, [
+            'request_id' => $visitorRequest->request_id,
+            'visit_end_date' => $newEndDate,
+        ]);
+
+        return response()->json([
+            'message' => "Visitor stay extended until {$newEndDate}.",
+            'request' => $visitorRequest->fresh(['visitor', 'securityGuard']),
+        ]);
+    }
+
+    private function revokeLinkedUpdateRequest(VisitorRequest $visitorRequest, string $reason): void
+    {
+        if (! empty($visitorRequest->notes) && preg_match('/\[UpdateReq ID:\s*(\d+)\]/', $visitorRequest->notes, $matches)) {
+            $updateReq = UpdateRequest::find((int) $matches[1]);
+            if ($updateReq && in_array($updateReq->status, ['pending', 'approved'], true)) {
+                $updateReq->update([
+                    'status' => 'rejected',
+                    'admin_notes' => $reason,
+                ]);
+            }
+        }
     }
 
     /**

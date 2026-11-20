@@ -191,10 +191,14 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
+        $normalizedInput = strtoupper(preg_replace('/\s+/', '', (string) $loginInput));
+
         $user = User::with(['gender'])
-            ->where(function ($query) use ($loginInput) {
+            ->where(function ($query) use ($loginInput, $normalizedInput) {
                 $query->where('username', $loginInput)
-                    ->orWhere('email', $loginInput);
+                    ->orWhere('email', $loginInput)
+                    ->orWhere('contact_number', $loginInput)
+                    ->orWhereRaw('UPPER(REPLACE(plate_number, " ", "")) = ?', [$normalizedInput]);
             })
             ->where('is_deleted', false)
             ->first();

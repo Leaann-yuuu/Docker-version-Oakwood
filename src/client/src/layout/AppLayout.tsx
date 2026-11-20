@@ -9,7 +9,7 @@ const AppLayout = () => {
     const { user } = useAuth();
 
     useEffect(() => {
-        const fetchUnread = () => {
+        const fetchBadges = () => {
             GateAccessService.loadNotifications(1)
                 .then((res) => {
                     const items = res.data.notifications.data ?? [];
@@ -19,13 +19,13 @@ const AppLayout = () => {
                 .catch(() => setUnreadCount(0));
         };
 
-        fetchUnread();
-        const intervalId = setInterval(fetchUnread, 5000);
-        window.addEventListener('notifications_updated', fetchUnread);
+        fetchBadges();
+        const intervalId = setInterval(fetchBadges, 5000);
+        window.addEventListener('notifications_updated', fetchBadges);
         
         return () => {
             clearInterval(intervalId);
-            window.removeEventListener('notifications_updated', fetchUnread);
+            window.removeEventListener('notifications_updated', fetchBadges);
         };
     }, []);
 
@@ -35,7 +35,7 @@ const AppLayout = () => {
 
         if (role === 'guard' || role === 'security_guard') {
             items = items.filter(item => 
-                !['Residents', 'Reports', 'Update Requests'].includes(item.label)
+                !['Residents', 'Reports'].includes(item.label)
             );
         }
 

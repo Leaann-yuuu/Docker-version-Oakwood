@@ -16,11 +16,7 @@ class NavItemData {
   });
 }
 
-/// A modern floating navigation bar matching the design:
-/// - Rounded pill floating container with blur
-/// - Rounded squircle card background for the active tab
-/// - Icon on top, label below, and a small glowing active dot underneath
-/// - Small notification indicator badge support
+/// Floating bottom navigation bar styled after the Oakwood Gate Access UI showcase.
 class CustomFloatingBottomNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
@@ -35,26 +31,15 @@ class CustomFloatingBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = AppColors.palette;
+    final isDark = p.isDark;
 
-    // Translucent bar container
-    final barBgColor = isDark
-        ? const Color(0xFF13171F).withValues(alpha: 0.85) // Dark glass
-        : const Color(0xFFFFFFFF).withValues(alpha: 0.90); // Light glass
-
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
-
-    // Active item background card (subtle highlighted squircle)
-    final activeCardColor = isDark
-        ? Colors.white.withValues(alpha: 0.10)
-        : AppColors.primaryLight;
-
-    final activeColor = isDark ? Colors.white : AppColors.primary;
-    final inactiveColor = isDark
-        ? const Color(0xFF8B949E)
-        : const Color(0xFF64748B);
+    final barBgColor = p.navBg;
+    final borderColor = p.borderSubtle;
+    final activeCardColor = p.accentSoft;
+    final activeColor = p.accentText;
+    final dotColor = p.accent;
+    final inactiveColor = p.textMuted;
 
     return Container(
       color: Colors.transparent,
@@ -64,17 +49,17 @@ class CustomFloatingBottomNavBar extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(40),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
             child: Container(
               height: 74,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
                 color: barBgColor,
                 borderRadius: BorderRadius.circular(40),
-                border: Border.all(color: borderColor, width: 1),
+                border: Border.all(color: borderColor, width: 1.1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
                     blurRadius: 28,
                     spreadRadius: 2,
                     offset: const Offset(0, 10),
@@ -96,8 +81,10 @@ class CustomFloatingBottomNavBar extends StatelessWidget {
                         curve: Curves.easeOutCubic,
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         decoration: BoxDecoration(
-                          color: isSelected ? activeCardColor : Colors.transparent,
-                          borderRadius: BorderRadius.circular(18),
+                          color: isSelected
+                              ? activeCardColor
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -111,20 +98,22 @@ class CustomFloatingBottomNavBar extends StatelessWidget {
                                 Icon(
                                   isSelected ? item.selectedIcon : item.icon,
                                   color: isSelected ? activeColor : inactiveColor,
-                                  size: 22,
+                                  size: 21,
                                 ),
                                 if (item.hasBadge)
                                   Positioned(
-                                    top: -1,
-                                    right: -3,
+                                    top: -2,
+                                    right: -4,
                                     child: Container(
-                                      width: 7,
-                                      height: 7,
+                                      width: 8,
+                                      height: 8,
                                       decoration: BoxDecoration(
-                                        color: AppColors.error,
+                                        color: p.navBadgeDot,
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                          color: isDark ? const Color(0xFF13171F) : Colors.white,
+                                          color: isDark
+                                              ? const Color(0xFF131B2E)
+                                              : Colors.white,
                                           width: 1.5,
                                         ),
                                       ),
@@ -139,10 +128,10 @@ class CustomFloatingBottomNavBar extends StatelessWidget {
                               item.label,
                               style: TextStyle(
                                 color: isSelected ? activeColor : inactiveColor,
-                                fontSize: 11.5,
+                                fontSize: 11,
                                 fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
                                 letterSpacing: -0.2,
                               ),
                             ),
@@ -151,10 +140,10 @@ class CustomFloatingBottomNavBar extends StatelessWidget {
                             // ── Bottom Active Indicator Dot ──────────
                             AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              width: isSelected ? 4 : 0,
-                              height: isSelected ? 4 : 0,
+                              width: isSelected ? 4.5 : 0,
+                              height: isSelected ? 4.5 : 0,
                               decoration: BoxDecoration(
-                                color: activeColor,
+                                color: dotColor,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -172,5 +161,3 @@ class CustomFloatingBottomNavBar extends StatelessWidget {
     );
   }
 }
-
-

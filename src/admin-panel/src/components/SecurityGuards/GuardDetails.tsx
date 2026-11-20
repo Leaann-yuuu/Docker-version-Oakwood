@@ -78,6 +78,25 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
     vehicleType?: string | null
     plateNumber?: string | null
   } | null>(null)
+  const [fullImage, setFullImage] = useState<{
+    url: string
+    title: string
+    docType: string
+  } | null>(null)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (fullImage) {
+          setFullImage(null)
+        } else if (previewDoc) {
+          setPreviewDoc(null)
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [fullImage, previewDoc])
 
   const [form, setForm] = useState({
     first_name: '',
@@ -917,23 +936,46 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
                     )}
                   </div>
                   {previewDoc.validIdUrl && (
-                    <a
-                      href={previewDoc.validIdUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFullImage({
+                          url: previewDoc.validIdUrl!,
+                          title: `${previewDoc.residentName} — Valid ID`,
+                          docType: 'Valid ID (Resident Verification)',
+                        })
+                      }
+                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition cursor-pointer"
                     >
                       Open Full Image
-                    </a>
+                    </button>
                   )}
                 </div>
                 {previewDoc.validIdUrl ? (
-                  <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                  <div
+                    onClick={() =>
+                      setFullImage({
+                        url: previewDoc.validIdUrl!,
+                        title: `${previewDoc.residentName} — Valid ID`,
+                        docType: 'Valid ID (Resident Verification)',
+                      })
+                    }
+                    className="group relative flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2 cursor-pointer hover:ring-2 hover:ring-emerald-500/50 transition"
+                    title="Click to view full image"
+                  >
                     <img
                       src={previewDoc.validIdUrl}
                       alt="Valid ID Document"
-                      className="max-h-[60vh] w-auto rounded-lg object-contain"
+                      className="max-h-[60vh] w-auto rounded-lg object-contain transition group-hover:opacity-95"
                     />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition rounded-lg pointer-events-none">
+                      <span className="rounded-lg bg-zinc-900/90 px-3 py-1.5 text-xs font-medium text-white shadow-lg border border-white/10 flex items-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                        </svg>
+                        Click to enlarge
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
@@ -962,23 +1004,46 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
                     )}
                   </div>
                   {previewDoc.orCrUrl && (
-                    <a
-                      href={previewDoc.orCrUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition"
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFullImage({
+                          url: previewDoc.orCrUrl!,
+                          title: `${previewDoc.residentName} — Vehicle OR/CR`,
+                          docType: 'Vehicle OR/CR Document',
+                        })
+                      }
+                      className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/20 transition cursor-pointer"
                     >
                       Open Full Image
-                    </a>
+                    </button>
                   )}
                 </div>
                 {previewDoc.orCrUrl ? (
-                  <div className="flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2">
+                  <div
+                    onClick={() =>
+                      setFullImage({
+                        url: previewDoc.orCrUrl!,
+                        title: `${previewDoc.residentName} — Vehicle OR/CR`,
+                        docType: 'Vehicle OR/CR Document',
+                      })
+                    }
+                    className="group relative flex min-h-[260px] max-h-[65vh] items-center justify-center overflow-auto rounded-lg bg-black/70 p-2 cursor-pointer hover:ring-2 hover:ring-emerald-500/50 transition"
+                    title="Click to view full image"
+                  >
                     <img
                       src={previewDoc.orCrUrl}
                       alt="Vehicle OR/CR Document"
-                      className="max-h-[60vh] w-auto rounded-lg object-contain"
+                      className="max-h-[60vh] w-auto rounded-lg object-contain transition group-hover:opacity-95"
                     />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition rounded-lg pointer-events-none">
+                      <span className="rounded-lg bg-zinc-900/90 px-3 py-1.5 text-xs font-medium text-white shadow-lg border border-white/10 flex items-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                        </svg>
+                        Click to enlarge
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
@@ -992,6 +1057,79 @@ const GuardDetailsModal = ({ isOpen, user, onClose, onUpdate }: GuardDetailsProp
             </div>
           </div>
         </div>
+      )}
+
+      {fullImage && createPortal(
+        <div
+          className="fixed inset-0 z-[10000] flex flex-col bg-black/95 backdrop-blur-md animate-fade-in"
+          onClick={() => setFullImage(null)}
+        >
+          {/* Top Header / Navigation Bar with prominent Back Button */}
+          <div
+            className="flex items-center justify-between border-b border-white/10 bg-zinc-950/80 px-4 py-3 sm:px-6 z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Prominent Back Button to return to verification modal */}
+            <button
+              type="button"
+              onClick={() => setFullImage(null)}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 active:bg-emerald-700 transition cursor-pointer"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span>Back</span>
+            </button>
+
+            {/* Document Title / Info */}
+            <div className="text-center px-4 max-w-xl truncate">
+              <h4 className="text-sm font-bold text-white truncate">{fullImage.title}</h4>
+              <p className="text-[11px] text-zinc-400">{fullImage.docType}</p>
+            </div>
+
+            {/* Right Actions: Open in new tab + Close Button */}
+            <div className="flex items-center gap-2">
+              <a
+                href={fullImage.url}
+                target="_blank"
+                rel="noreferrer"
+                title="Open original file in new browser tab"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-white/20 hover:text-white transition"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                <span className="hidden sm:inline">Open in Tab</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setFullImage(null)}
+                title="Close (Esc)"
+                className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white transition cursor-pointer"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Center Image Container */}
+          <div className="relative flex-1 flex items-center justify-center p-4 overflow-auto">
+            <img
+              src={fullImage.url}
+              alt={fullImage.title}
+              className="max-h-[85vh] max-w-[95vw] rounded-lg object-contain shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+
+          {/* Footer Hint */}
+          <div className="border-t border-white/5 bg-zinc-950/40 px-4 py-2 text-center text-[11px] text-zinc-500">
+            Click anywhere outside or press <kbd className="rounded border border-white/20 bg-white/5 px-1.5 py-0.5 text-zinc-300 font-mono text-[10px]">Esc</kbd> or click <span className="font-semibold text-zinc-300">Back</span> to return to the verification details
+          </div>
+        </div>,
+        document.body
       )}
     </div>,
     document.body,

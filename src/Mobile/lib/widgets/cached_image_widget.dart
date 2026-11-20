@@ -64,7 +64,7 @@ class CachedImageWidget extends StatelessWidget {
         color: AppColors.divider,
         borderRadius: borderRadius,
       ),
-      child: const Icon(Icons.person_outline, color: AppColors.textSecondary),
+      child: Icon(Icons.person_outline, color: AppColors.textSecondary),
     );
   }
 }

@@ -78,7 +78,6 @@ export const adminNavItems: NavItem[] = [
     { path: "/activity-logs", label: "Activity Logs", icon: <ActivityIcon /> },
     { path: "/reports", label: "Reports", icon: <ChartIcon /> },
     { path: "/notifications", label: "Notifications", icon: <BellIcon /> },
-    { path: "/update-requests", label: "Update Requests", icon: <DocumentCheckIcon /> },
 ];
 
 // eslint-disable-next-line react-refresh/only-export-components

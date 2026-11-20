@@ -29,7 +29,7 @@ class ViewUserScreen extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.access_time_rounded,
                       color: AppColors.primary,
                       size: 16,

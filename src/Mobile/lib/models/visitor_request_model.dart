@@ -31,6 +31,7 @@ class VisitorRequestModel {
   final String requestedBy; // 'resident' | 'guard'
   final String status; // PENDING | APPROVED | DENIED | CONFIRMED | REJECTED | COMPLETED | CANCELLED
   final String visitDate;
+  final String? visitEndDate;
   final String visitTime;
   final String purpose;
   final String? notes;
@@ -46,6 +47,7 @@ class VisitorRequestModel {
     required this.requestedBy,
     required this.status,
     required this.visitDate,
+    this.visitEndDate,
     required this.visitTime,
     required this.purpose,
     this.notes,
@@ -63,6 +65,7 @@ class VisitorRequestModel {
       requestedBy: json['requested_by'] as String? ?? 'resident',
       status: json['status'] as String? ?? 'PENDING',
       visitDate: json['visit_date'] as String? ?? '',
+      visitEndDate: json['visit_end_date'] as String?,
       visitTime: json['visit_time'] as String? ?? '',
       purpose: json['purpose'] as String? ?? '',
       notes: json['notes'] as String?,
@@ -79,6 +82,22 @@ class VisitorRequestModel {
   bool get isPendingWalkin =>
       requestedBy == 'guard' && status == 'PENDING';
 
+  String get effectiveEndDate =>
+      (visitEndDate != null && visitEndDate!.isNotEmpty) ? visitEndDate! : visitDate;
+
+  String get stayRangeLabel =>
+      (visitEndDate != null && visitEndDate!.isNotEmpty && visitEndDate != visitDate)
+          ? '$visitDate → $visitEndDate'
+          : visitDate;
+
+  bool get isActivePass {
+    final s = status.toUpperCase();
+    if (s == 'DENIED' || s == 'REJECTED' || s == 'CANCELLED') {
+      return false;
+    }
+    return true;
+  }
+
   /// Copy with new status after respond
   VisitorRequestModel copyWithStatus(String newStatus) {
     return VisitorRequestModel(
@@ -88,6 +107,7 @@ class VisitorRequestModel {
       requestedBy: requestedBy,
       status: newStatus,
       visitDate: visitDate,
+      visitEndDate: visitEndDate,
       visitTime: visitTime,
       purpose: purpose,
       notes: notes,

@@ -23,8 +23,8 @@ class SystemStatus extends Model
 
     public static function current(): self
     {
-        $defaultEntrance = env('ESP32_CAM_ENTRANCE_STREAM_URL') ?: env('ESP32_CAM_STREAM_URL') ?: 'rtsp://Capstonecamera:Capstonecamera@192.168.86.38:554/stream2';
-        $defaultExit = env('ESP32_CAM_EXIT_STREAM_URL') ?: 'rtsp://Capstonecameraexit:Capstonecameraexit@192.168.86.26:554/stream2';
+        $defaultEntrance = env('ESP32_CAM_ENTRANCE_STREAM_URL') ?: env('ESP32_CAM_STREAM_URL') ?: 'rtsp://Cameraentrance:Cameraentrance@192.168.254.200:554/stream1';
+        $defaultExit = env('ESP32_CAM_EXIT_STREAM_URL') ?: 'rtsp://Capstonecameraexit:Capstonecameraexit@192.168.254.122:554/stream1';
 
         $status = static::query()->firstOrCreate([], [
             'gate_status' => 'closed',

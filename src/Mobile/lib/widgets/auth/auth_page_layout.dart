@@ -44,7 +44,13 @@ class _AuthPageLayoutState extends State<AuthPageLayout>
     );
     // translateY: 22px → 0  (positive dy = downward offset at start)
     _slideAnim = Tween<Offset>(
-      begin: Offset(0, 22.h / MediaQueryData.fromView(WidgetsBinding.instance.platformDispatcher.views.first).size.height),
+      begin: Offset(
+          0,
+          22.h /
+              MediaQueryData.fromView(
+                      WidgetsBinding.instance.platformDispatcher.views.first)
+                  .size
+                  .height),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(parent: _animController, curve: curve),

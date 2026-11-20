@@ -40,24 +40,29 @@ class ResidentService {
     }
   }
 
+  /// Fetch notifications (throws on error so callers can distinguish failures)
+  Future<List<NotificationModel>> fetchNotifications() async {
+    final response = await _dio.get(ApiConstants.notifications);
+    final data = response.data;
+    List rawList = [];
+    if (data is Map && data['notifications'] != null) {
+      if (data['notifications']['data'] is List) {
+        rawList = data['notifications']['data'] as List;
+      } else if (data['notifications'] is List) {
+        rawList = data['notifications'] as List;
+      }
+    } else if (data is List) {
+      rawList = data;
+    }
+    return rawList
+        .map((e) => NotificationModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   /// Get notifications
   Future<List<NotificationModel>> getNotifications() async {
     try {
-      final response = await _dio.get(ApiConstants.notifications);
-      final data = response.data;
-      List rawList = [];
-      if (data is Map && data['notifications'] != null) {
-        if (data['notifications']['data'] is List) {
-          rawList = data['notifications']['data'] as List;
-        } else if (data['notifications'] is List) {
-          rawList = data['notifications'] as List;
-        }
-      } else if (data is List) {
-        rawList = data;
-      }
-      return rawList
-          .map((e) => NotificationModel.fromJson(e as Map<String, dynamic>))
-          .toList();
+      return await fetchNotifications();
     } catch (_) {
       return [];
     }
@@ -173,6 +178,29 @@ class ResidentService {
   /// Resident cancels their own pre-registered visitor request.
   Future<Map<String, dynamic>> residentCancelRequest(int requestId) async {
     final res = await _dio.put(ApiConstants.residentCancel(requestId));
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Resident deletes a visitor pass anytime.
+  Future<Map<String, dynamic>> residentDeletePass(int requestId) async {
+    final res = await _dio.delete(ApiConstants.residentDelete(requestId));
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Resident extends the duration of stay (visit_end_date) for a visitor pass.
+  Future<Map<String, dynamic>> residentExtendDuration(
+    int requestId, {
+    int? addDays,
+    String? visitEndDate,
+  }) async {
+    final res = await _dio.put(
+      ApiConstants.residentExtend(requestId),
+      data: {
+        if (addDays != null) 'add_days': addDays,
+        if (visitEndDate != null && visitEndDate.isNotEmpty)
+          'visit_end_date': visitEndDate,
+      },
+    );
     return res.data as Map<String, dynamic>;
   }
 

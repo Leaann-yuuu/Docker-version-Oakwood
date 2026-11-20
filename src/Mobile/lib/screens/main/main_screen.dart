@@ -26,6 +26,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
   Timer? _pollTimer;
   bool _isPolling = false;
   bool _isInitialFetchDone = false;
+  int _maxKnownNotificationId = 0;
   final Set<int> _knownNotificationIds = {};
   final List<NotificationModel> _pendingNotificationPopups = [];
   bool _isShowingPopup = false;
@@ -75,24 +76,38 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
     try {
       final latestList =
-          await ref.read(residentServiceProvider).getNotifications();
+          await ref.read(residentServiceProvider).fetchNotifications();
       if (!mounted) return;
 
       if (!_isInitialFetchDone) {
         // Record all initial notifications so we do not pop up historical ones on launch
-        _knownNotificationIds.addAll(latestList.map((n) => n.id));
+        for (final n in latestList) {
+          _knownNotificationIds.add(n.id);
+          if (n.id > _maxKnownNotificationId) {
+            _maxKnownNotificationId = n.id;
+          }
+        }
         _isInitialFetchDone = true;
         return;
       }
 
-      // Detect newly arrived, unread notifications
+      // Detect newly arrived, unread notifications (must have a higher ID than
+      // any previously seen notification so older unread items shifting onto
+      // page 1 after a delete never trigger an auto-popup)
       final newUnread = latestList
-          .where((n) => !_knownNotificationIds.contains(n.id) && !n.isRead)
+          .where((n) =>
+              n.id > _maxKnownNotificationId &&
+              !_knownNotificationIds.contains(n.id) &&
+              !n.isRead &&
+              !_pendingNotificationPopups.any((p) => p.id == n.id))
           .toList();
 
-      // Record all IDs in known set
+      // Record all IDs in known set and update high-water mark
       for (final n in latestList) {
         _knownNotificationIds.add(n.id);
+        if (n.id > _maxKnownNotificationId) {
+          _maxKnownNotificationId = n.id;
+        }
       }
 
       if (newUnread.isNotEmpty) {

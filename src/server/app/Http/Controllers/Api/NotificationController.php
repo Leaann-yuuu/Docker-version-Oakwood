@@ -45,7 +45,7 @@ class NotificationController extends Controller
 
     public function show(Request $request, Notification $notification)
     {
-        if ($notification->user_id !== $request->user()->user_id) {
+        if ((int) $notification->user_id !== (int) $request->user()->user_id) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
@@ -63,7 +63,7 @@ class NotificationController extends Controller
 
     public function markRead(Request $request, Notification $notification)
     {
-        if ($notification->user_id !== $request->user()->user_id) {
+        if ((int) $notification->user_id !== (int) $request->user()->user_id) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 
@@ -83,7 +83,7 @@ class NotificationController extends Controller
 
     public function destroy(Request $request, Notification $notification)
     {
-        if ($notification->user_id !== $request->user()->user_id) {
+        if ((int) $notification->user_id !== (int) $request->user()->user_id) {
             return response()->json(['message' => 'Not found.'], 404);
         }
 

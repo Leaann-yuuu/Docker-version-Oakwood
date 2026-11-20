@@ -20,11 +20,12 @@ class _ResidentVisitorsScreenState
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   int? _respondingId;
+  int? _busyPassId;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -114,17 +115,126 @@ class _ResidentVisitorsScreenState
     );
   }
 
+  Future<void> _extendDuration(
+    VisitorRequestModel req, {
+    int? addDays,
+    String? visitEndDate,
+  }) async {
+    setState(() => _busyPassId = req.requestId);
+    try {
+      final service = ref.read(residentServiceProvider);
+      final res = await service.residentExtendDuration(
+        req.requestId,
+        addDays: addDays,
+        visitEndDate: visitEndDate,
+      );
+      ref.invalidate(myVisitorRequestsProvider);
+      ref.invalidate(myUpdateRequestsProvider);
+      if (mounted) {
+        ToastHelper.showSuccess(
+          context,
+          res['message'] as String? ?? 'Visitor stay duration updated.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ToastHelper.showError(
+            context, 'Failed to extend visitor stay duration.');
+      }
+    } finally {
+      if (mounted) setState(() => _busyPassId = null);
+    }
+  }
+
+  Future<void> _showExtendSheet(VisitorRequestModel req) async {
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+      ),
+      builder: (sheetCtx) => _ExtendDurationSheet(
+        request: req,
+        onSelectDays: (days) {
+          Navigator.pop(sheetCtx);
+          _extendDuration(req, addDays: days);
+        },
+        onSelectDate: (dateStr) {
+          Navigator.pop(sheetCtx);
+          _extendDuration(req, visitEndDate: dateStr);
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmDeletePass(VisitorRequestModel req) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Visitor Pass'),
+        content: Text(
+          'Are you sure you want to delete the pass for ${req.visitor?.fullName ?? 'this visitor'}? They will no longer be able to enter the gate.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Pass'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _busyPassId = req.requestId);
+    try {
+      final service = ref.read(residentServiceProvider);
+      await service.residentDeletePass(req.requestId);
+      ref.invalidate(myVisitorRequestsProvider);
+      ref.invalidate(myUpdateRequestsProvider);
+      ref.invalidate(notificationsProvider);
+      if (mounted) {
+        ToastHelper.showSuccess(context, 'Visitor pass deleted.');
+      }
+    } catch (_) {
+      if (mounted) {
+        ToastHelper.showError(context, 'Failed to delete visitor pass.');
+      }
+    } finally {
+      if (mounted) setState(() => _busyPassId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final p = AppColors.palette;
     final requestsAsync = ref.watch(myVisitorRequestsProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppColors.primary,
+        backgroundColor: p.heroFrom,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [p.heroFrom, p.heroTo],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         title: Text(
           'Visitor Requests',
           style: TextStyle(
@@ -141,19 +251,21 @@ class _ResidentVisitorsScreenState
         ],
         bottom: TabBar(
           controller: _tabCtrl,
-          indicatorColor: Colors.white,
+          indicatorColor: p.isDark ? p.accent : Colors.white,
           indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          labelColor: p.isDark ? p.accentText : Colors.white,
+          unselectedLabelColor:
+              p.isDark ? const Color(0xFF94A3B8) : Colors.white70,
           labelStyle: TextStyle(fontSize: 13.5.sp, fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: 'Pending Action'),
+            Tab(text: 'Visitor Passes'),
             Tab(text: 'All History'),
           ],
         ),
       ),
       body: requestsAsync.when(
-        loading: () => const Center(
+        loading: () => Center(
           child: CircularProgressIndicator(color: AppColors.primary),
         ),
         error: (e, _) => Center(
@@ -180,6 +292,8 @@ class _ResidentVisitorsScreenState
         data: (all) {
           final pending =
               all.where((r) => r.isPendingWalkin).toList();
+          final activePasses =
+              all.where((r) => r.isActivePass).toList();
           return TabBarView(
             controller: _tabCtrl,
             children: [
@@ -188,10 +302,21 @@ class _ResidentVisitorsScreenState
                 respondingId: _respondingId,
                 onRespond: _showRespondSheet,
               ),
-              _HistoryTab(
-                requests: all,
+              _PassesTab(
+                requests: activePasses,
+                busyId: _busyPassId,
                 statusColor: _statusColor,
                 statusIcon: _statusIcon,
+                onExtend: _showExtendSheet,
+                onDelete: _confirmDeletePass,
+              ),
+              _HistoryTab(
+                requests: all,
+                busyId: _busyPassId,
+                statusColor: _statusColor,
+                statusIcon: _statusIcon,
+                onExtend: _showExtendSheet,
+                onDelete: _confirmDeletePass,
               ),
             ],
           );
@@ -238,7 +363,7 @@ class _PendingTabState extends State<_PendingTab> {
           children: [
             Container(
               padding: EdgeInsets.all(20.r),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.primaryLight,
                 shape: BoxShape.circle,
               ),
@@ -399,7 +524,7 @@ class _WalkinCard extends StatelessWidget {
                   ),
                 SizedBox(height: 14.h),
                 if (isResponding)
-                  const Center(
+                  Center(
                     child: SizedBox(
                       height: 36,
                       width: 36,
@@ -468,18 +593,285 @@ class _WalkinCard extends StatelessWidget {
 
 
 // ---------------------------------------------------------------------------
-// Tab 2 - History
+// Tab 2 - Active Visitor Passes (Extend Duration / Delete Anytime)
+// ---------------------------------------------------------------------------
+
+class _PassesTab extends StatefulWidget {
+  final List<VisitorRequestModel> requests;
+  final int? busyId;
+  final Color Function(String) statusColor;
+  final IconData Function(String) statusIcon;
+  final void Function(VisitorRequestModel) onExtend;
+  final void Function(VisitorRequestModel) onDelete;
+
+  const _PassesTab({
+    required this.requests,
+    required this.busyId,
+    required this.statusColor,
+    required this.statusIcon,
+    required this.onExtend,
+    required this.onDelete,
+  });
+
+  @override
+  State<_PassesTab> createState() => _PassesTabState();
+}
+
+class _PassesTabState extends State<_PassesTab> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.requests.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(20.r),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.badge_outlined,
+                  color: AppColors.primary, size: 36.r),
+            ),
+            SizedBox(height: 16.h),
+            Text('No active visitor passes',
+                style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface)),
+            SizedBox(height: 6.h),
+            Text(
+              'Your visitor passes will appear here.\nYou can extend their stay or delete them anytime.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13.sp,
+                  color: AppColors.textSecondary,
+                  height: 1.4),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RawScrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      interactive: true,
+      thickness: 4.5.w,
+      radius: const Radius.circular(4),
+      thumbColor: Theme.of(context).dividerColor.withValues(alpha: 0.6),
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 120.h),
+        itemCount: widget.requests.length,
+        itemBuilder: (ctx, i) {
+          final req = widget.requests[i];
+          return _VisitorPassCard(
+            request: req,
+            isBusy: widget.busyId == req.requestId,
+            statusColor: widget.statusColor(req.status),
+            statusIcon: widget.statusIcon(req.status),
+            onExtend: () => widget.onExtend(req),
+            onDelete: () => widget.onDelete(req),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _VisitorPassCard extends StatelessWidget {
+  final VisitorRequestModel request;
+  final bool isBusy;
+  final Color statusColor;
+  final IconData statusIcon;
+  final VoidCallback onExtend;
+  final VoidCallback onDelete;
+
+  const _VisitorPassCard({
+    required this.request,
+    required this.isBusy,
+    required this.statusColor,
+    required this.statusIcon,
+    required this.onExtend,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final visitor = request.visitor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 14.h),
+      padding: EdgeInsets.all(15.r),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(
+          color: statusColor.withValues(alpha: isDark ? 0.35 : 0.25),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40.r,
+                height: 40.r,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: isDark ? 0.20 : 0.12),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                child: Icon(statusIcon, color: statusColor, size: 20.r),
+              ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      visitor?.fullName ?? 'Unknown Visitor',
+                      style: TextStyle(
+                        fontSize: 15.5.sp,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 2.h),
+                    Text(
+                      request.purpose,
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: AppColors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              _StatusBadge(label: request.status, color: statusColor),
+            ],
+          ),
+          SizedBox(height: 12.h),
+          _DetailRow(
+            icon: Icons.calendar_today_outlined,
+            label: 'Stay',
+            value: '${request.stayRangeLabel} (${request.visitTime})',
+          ),
+          if (visitor?.vehiclePlate != null &&
+              visitor!.vehiclePlate!.isNotEmpty)
+            _DetailRow(
+              icon: Icons.directions_car_outlined,
+              label: 'Vehicle',
+              value:
+                  '${visitor.vehiclePlate}${visitor.vehicleType != null ? ' • ${visitor.vehicleType}' : ''}',
+            ),
+          SizedBox(height: 10.h),
+          if (isBusy)
+            Center(
+              child: SizedBox(
+                height: 28,
+                width: 28,
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 10.h),
+                      side: const BorderSide(color: Color(0xFFFCA5A5)),
+                      backgroundColor: const Color(0xFFFEE2E2),
+                      foregroundColor: const Color(0xFFDC2626),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                    ),
+                    icon: Icon(Icons.delete_outline_rounded, size: 16.r),
+                    label: Text(
+                      'Delete Pass',
+                      style: TextStyle(
+                        fontSize: 12.5.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 10.w),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: onExtend,
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: 10.h),
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                    ),
+                    icon: Icon(Icons.more_time_rounded, size: 16.r),
+                    label: Text(
+                      'Add Duration',
+                      style: TextStyle(
+                        fontSize: 12.5.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tab 3 - History
 // ---------------------------------------------------------------------------
 
 class _HistoryTab extends StatefulWidget {
   final List<VisitorRequestModel> requests;
+  final int? busyId;
   final Color Function(String) statusColor;
   final IconData Function(String) statusIcon;
+  final void Function(VisitorRequestModel) onExtend;
+  final void Function(VisitorRequestModel) onDelete;
 
   const _HistoryTab({
     required this.requests,
+    required this.busyId,
     required this.statusColor,
     required this.statusIcon,
+    required this.onExtend,
+    required this.onDelete,
   });
 
   @override
@@ -588,10 +980,14 @@ class _HistoryTabState extends State<_HistoryTab> {
                             size: 12.r,
                             color: AppColors.textMuted),
                         SizedBox(width: 4.w),
-                        Text('${req.visitDate}  ${req.visitTime}',
-                            style: TextStyle(
-                                fontSize: 11.sp,
-                                color: AppColors.textSecondary)),
+                        Expanded(
+                          child: Text(
+                              '${req.stayRangeLabel}  ${req.visitTime}',
+                              style: TextStyle(
+                                  fontSize: 11.sp,
+                                  color: AppColors.textSecondary),
+                              overflow: TextOverflow.ellipsis),
+                        ),
                         SizedBox(width: 8.w),
                         Container(
                           padding: EdgeInsets.symmetric(
@@ -617,6 +1013,55 @@ class _HistoryTabState extends State<_HistoryTab> {
                         ),
                       ],
                     ),
+                    if (req.isActivePass) ...[
+                      SizedBox(height: 8.h),
+                      if (widget.busyId == req.requestId)
+                        SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => widget.onExtend(req),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 8.w, vertical: 4.h),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: AppColors.primary,
+                              ),
+                              icon: Icon(Icons.more_time_rounded, size: 15.r),
+                              label: Text('Add Duration',
+                                  style: TextStyle(
+                                      fontSize: 11.5.sp,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            SizedBox(width: 8.w),
+                            TextButton.icon(
+                              onPressed: () => widget.onDelete(req),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 8.w, vertical: 4.h),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: const Color(0xFFDC2626),
+                              ),
+                              icon: Icon(Icons.delete_outline_rounded,
+                                  size: 15.r),
+                              label: Text('Delete',
+                                  style: TextStyle(
+                                      fontSize: 11.5.sp,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -847,6 +1292,133 @@ class _DetailRow extends StatelessWidget {
                 fontSize: 12.sp,
                 color: valueColor ?? Theme.of(context).colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExtendDurationSheet extends StatelessWidget {
+  final VisitorRequestModel request;
+  final void Function(int days) onSelectDays;
+  final void Function(String dateStr) onSelectDate;
+
+  const _ExtendDurationSheet({
+    required this.request,
+    required this.onSelectDays,
+    required this.onSelectDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final options = [
+      (label: '+1 Day', days: 1),
+      (label: '+2 Days', days: 2),
+      (label: '+3 Days', days: 3),
+      (label: '+1 Week', days: 7),
+    ];
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 32.h),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40.w,
+            height: 4.h,
+            decoration: BoxDecoration(
+              color: Theme.of(context).dividerColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          SizedBox(height: 18.h),
+          Icon(Icons.more_time_rounded, color: AppColors.primary, size: 34.r),
+          SizedBox(height: 10.h),
+          Text(
+            'Extend Stay Duration',
+            style: TextStyle(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          SizedBox(height: 6.h),
+          Text(
+            '${request.visitor?.fullName ?? 'Visitor'} • Current: ${request.stayRangeLabel}',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13.sp, color: AppColors.textSecondary),
+          ),
+          SizedBox(height: 18.h),
+          Wrap(
+            spacing: 10.w,
+            runSpacing: 10.h,
+            alignment: WrapAlignment.center,
+            children: options
+                .map(
+                  (opt) => ActionChip(
+                    label: Text(
+                      opt.label,
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    backgroundColor: isDark
+                        ? AppColors.primary.withValues(alpha: 0.18)
+                        : AppColors.primaryLight,
+                    side: BorderSide(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                    ),
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                    onPressed: () => onSelectDays(opt.days),
+                  ),
+                )
+                .toList(),
+          ),
+          SizedBox(height: 18.h),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final now = DateTime.now();
+                final startParsed = DateTime.tryParse(request.visitDate) ?? now;
+                final initialParsed =
+                    DateTime.tryParse(request.effectiveEndDate) ?? now;
+                final firstDate =
+                    startParsed.isBefore(now) ? startParsed : now;
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: initialParsed.isBefore(firstDate)
+                      ? firstDate
+                      : initialParsed,
+                  firstDate: firstDate,
+                  lastDate: now.add(const Duration(days: 90)),
+                );
+                if (picked != null) {
+                  final formatted =
+                      '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                  onSelectDate(formatted);
+                }
+              },
+              style: OutlinedButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 13.h),
+                side: BorderSide(color: AppColors.primary),
+                foregroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+              icon: Icon(Icons.calendar_month_rounded, size: 18.r),
+              label: Text(
+                'Choose Custom End Date',
+                style:
+                    TextStyle(fontSize: 13.5.sp, fontWeight: FontWeight.bold),
               ),
             ),
           ),

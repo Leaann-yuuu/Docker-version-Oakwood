@@ -23,6 +23,7 @@ class SecureStorage {
   }
 
   static const String _themeModeKey = 'app_theme_mode';
+  static const String _paletteKey = 'app_palette';
 
   Future<void> saveThemeMode(String mode) async {
     await _storage.write(key: _themeModeKey, value: mode);
@@ -30,5 +31,13 @@ class SecureStorage {
 
   Future<String?> getThemeMode() async {
     return await _storage.read(key: _themeModeKey);
+  }
+
+  Future<void> savePalette(String paletteKey) async {
+    await _storage.write(key: _paletteKey, value: paletteKey);
+  }
+
+  Future<String?> getPalette() async {
+    return await _storage.read(key: _paletteKey);
   }
 }

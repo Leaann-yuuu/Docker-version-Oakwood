@@ -79,6 +79,10 @@ export default function VisitorManagementPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // Delete confirmation modal state
+  const [deleteTarget, setDeleteTarget] = useState<VisitorRequestItem | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   // Notification / Alert message
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -347,6 +351,32 @@ export default function VisitorManagementPage() {
       void loadData(true);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Delete a visitor request record (available across all 4 tabs)
+  const handleDeleteRequest = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    setNotice(null);
+    try {
+      const res = await VisitorService.guardDelete(deleteTarget.request_id);
+      setNotice({
+        type: "success",
+        text: res.data?.message || "Visitor record deleted successfully.",
+      });
+      if (selectedRequest?.request_id === deleteTarget.request_id) {
+        closeRequestModal();
+      }
+      setDeleteTarget(null);
+      await loadData(false);
+    } catch (err: any) {
+      setNotice({
+        type: "error",
+        text: err.response?.data?.message || err.message || "Failed to delete visitor record.",
+      });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -841,6 +871,15 @@ export default function VisitorManagementPage() {
                         >
                           Details
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(req)}
+                          title="Delete visitor record"
+                          className="px-2 py-1 rounded-lg border border-rose-200 dark:border-rose-800/70 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] font-bold transition cursor-pointer"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1022,7 +1061,9 @@ export default function VisitorManagementPage() {
                     required
                     value={walkinForm.vehicle_type}
                     onChange={(e) => setWalkinForm({ ...walkinForm, vehicle_type: e.target.value })}
-                    className="w-full px-4 py-2 sm:py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-lime-500"
+                    className={`w-full px-4 py-2 sm:py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm outline-none focus:ring-2 focus:ring-lime-500 ${
+                      !walkinForm.vehicle_type ? "text-zinc-400 dark:text-zinc-400" : "text-zinc-900 dark:text-white font-medium"
+                    }`}
                   >
                     <option value="">-- Select Specific Vehicle Type --</option>
                     <option value="Sedan">Sedan (4-door passenger car)</option>
@@ -1083,137 +1124,147 @@ export default function VisitorManagementPage() {
       {selectedRequest &&
         createPortal(
           <div
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/70 backdrop-blur-sm animate-modal-backdrop-in"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto bg-black/75 backdrop-blur-sm animate-modal-backdrop-in"
             onClick={closeRequestModal}
           >
             <div
-              className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-2xl text-zinc-900 dark:text-zinc-100 my-auto animate-modal-panel-in"
+              className="relative w-full max-w-2xl lg:max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 shadow-2xl text-zinc-900 dark:text-zinc-100 my-auto animate-modal-panel-in"
               onClick={(e) => e.stopPropagation()}
             >
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4 mb-4">
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4 mb-5">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                <span className="text-xs font-black uppercase tracking-wider text-zinc-400">
                   Request #{selectedRequest.request_id} &bull; {selectedRequest.requested_by.toUpperCase()}
                 </span>
-                <h3 className="text-xl font-black text-zinc-900 dark:text-white">
+                <h3 className="text-2xl sm:text-3xl font-black text-zinc-900 dark:text-white mt-1">
                   Visitor Access Details
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={closeRequestModal}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold"
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xl font-bold transition"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700">
+            <div className="space-y-5 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700">
                 <div>
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase">Status</p>
-                  <div className="mt-1">
+                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Status</p>
+                  <div className="mt-1.5">
                     <StatusBadge status={selectedRequest.status} />
                   </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase">Registered Date</p>
-                  <p className="font-semibold text-zinc-800 dark:text-zinc-200 mt-1">
+                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Registered Date</p>
+                  <p className="font-bold text-sm sm:text-base text-zinc-800 dark:text-zinc-200 mt-1.5">
                     {new Date(selectedRequest.created_at).toLocaleString()}
                   </p>
                 </div>
               </div>
 
               {/* Visitor Details */}
-              <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-700 p-3.5 space-y-2">
-                <h4 className="font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider text-[11px]">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-700 p-4 sm:p-5 space-y-3">
+                <h4 className="font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider text-xs sm:text-sm">
                   Visitor Information
                 </h4>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <span className="text-zinc-400">Full Name:</span>{" "}
-                    <span className="font-bold text-zinc-900 dark:text-white">
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Full Name:</span>{" "}
+                    <span className="font-bold text-sm sm:text-base text-zinc-900 dark:text-white block sm:inline">
                       {selectedRequest.visitor?.full_name}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400">Contact:</span>{" "}
-                    <span className="font-semibold">{selectedRequest.visitor?.contact_number}</span>
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Contact:</span>{" "}
+                    <span className="font-semibold text-sm sm:text-base text-zinc-800 dark:text-zinc-200 block sm:inline">
+                      {selectedRequest.visitor?.contact_number}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400">Vehicle Plate:</span>{" "}
-                    <span className="font-mono font-bold">
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Vehicle Plate:</span>{" "}
+                    <span className="font-mono font-black text-sm sm:text-base text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg border border-zinc-300 dark:border-zinc-700 inline-block">
                       {selectedRequest.visitor?.vehicle_plate || "None"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400">Vehicle Type:</span>{" "}
-                    <span className="font-semibold">{selectedRequest.visitor?.vehicle_type || "N/A"}</span>
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Vehicle Type:</span>{" "}
+                    <span className="font-semibold text-sm sm:text-base text-zinc-800 dark:text-zinc-200 block sm:inline">
+                      {selectedRequest.visitor?.vehicle_type || "N/A"}
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Host Resident */}
-              <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-700 p-3.5 space-y-2">
-                <h4 className="font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider text-[11px]">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-700 p-4 sm:p-5 space-y-3">
+                <h4 className="font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider text-xs sm:text-sm">
                   Host Resident Information
                 </h4>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <span className="text-zinc-400">Resident Name:</span>{" "}
-                    <span className="font-bold text-zinc-900 dark:text-white">
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Resident Name:</span>{" "}
+                    <span className="font-bold text-sm sm:text-base text-zinc-900 dark:text-white block sm:inline">
                       {selectedRequest.resident ? `${selectedRequest.resident.first_name} ${selectedRequest.resident.last_name}` : "N/A"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400">Address:</span>{" "}
-                    <span className="font-semibold">{selectedRequest.resident?.address || "N/A"}</span>
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Address:</span>{" "}
+                    <span className="font-semibold text-sm sm:text-base text-zinc-800 dark:text-zinc-200 block sm:inline">
+                      {selectedRequest.resident?.address || "N/A"}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400">Phone:</span>{" "}
-                    <span className="font-semibold">{selectedRequest.resident?.contact_number || "N/A"}</span>
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Phone:</span>{" "}
+                    <span className="font-semibold text-sm sm:text-base text-zinc-800 dark:text-zinc-200 block sm:inline">
+                      {selectedRequest.resident?.contact_number || "N/A"}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400">Visit Schedule:</span>{" "}
-                    <span className="font-semibold">{selectedRequest.visit_date} @ {formatTimeDisplay(selectedRequest.visit_time)}</span>
+                    <span className="text-zinc-400 text-xs sm:text-sm font-medium">Visit Schedule:</span>{" "}
+                    <span className="font-semibold text-sm sm:text-base text-zinc-800 dark:text-zinc-200 block sm:inline">
+                      {selectedRequest.visit_date} @ {formatTimeDisplay(selectedRequest.visit_time)}
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Purpose & Notes */}
-              <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-700 p-3.5 space-y-1.5">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase">Purpose of Visit</p>
-                <p className="font-semibold text-zinc-900 dark:text-white">{selectedRequest.purpose}</p>
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-700 p-4 sm:p-5 space-y-2.5">
+                <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Purpose of Visit</p>
+                <p className="font-bold text-sm sm:text-base text-zinc-900 dark:text-white">{selectedRequest.purpose}</p>
                 {selectedRequest.notes && (
                   <>
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase mt-2">Notes</p>
-                    <p className="text-zinc-600 dark:text-zinc-300">{selectedRequest.notes}</p>
+                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mt-3">Notes</p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">{selectedRequest.notes}</p>
                   </>
                 )}
                 {selectedRequest.guard_remarks && (
                   <>
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase mt-2">Guard Remarks</p>
-                    <p className="text-zinc-600 dark:text-zinc-300">{selectedRequest.guard_remarks}</p>
+                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mt-3">Guard Remarks</p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">{selectedRequest.guard_remarks}</p>
                   </>
                 )}
               </div>
 
               {/* Decision Section for Resident Requests Pending Guard Review */}
               {selectedRequest.requested_by === "resident" && (selectedRequest.status === "PENDING" || selectedRequest.status === "APPROVED" || selectedRequest.status === "DENIED") && (
-                <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-3">
+                <div className="p-5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <p className="font-black text-amber-900 dark:text-amber-300 text-xs">
+                    <p className="font-black text-amber-900 dark:text-amber-300 text-sm">
                       Security Guard Verification Decision
                     </p>
                     {selectedRequest.status !== "PENDING" && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
                         Current: {selectedRequest.status}
                       </span>
                     )}
                   </div>
 
                   {modalError && (
-                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center justify-between animate-fadeIn">
+                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-sm font-semibold flex items-center justify-between animate-fadeIn">
                       <div className="flex items-center gap-2">
                         <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -1223,7 +1274,7 @@ export default function VisitorManagementPage() {
                       <button
                         type="button"
                         onClick={() => setModalError(null)}
-                        className="text-xs font-bold hover:underline ml-2"
+                        className="text-xs font-bold hover:underline ml-2 cursor-pointer"
                       >
                         ✕
                       </button>
@@ -1231,22 +1282,22 @@ export default function VisitorManagementPage() {
                   )}
 
                   <textarea
-                    rows={2}
+                    rows={3}
                     placeholder="Enter security guard remarks (optional)..."
                     value={guardRemarks}
                     onChange={(e) => setGuardRemarks(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500 transition"
                   />
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <button
                       type="button"
                       disabled={actionLoading}
                       onClick={() => void handleReview("DENIED")}
-                      className="py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                      className="py-3 px-5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm transition cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 shadow-xs"
                     >
                       {actionLoading ? (
                         <>
-                          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
                           <span>Processing...</span>
                         </>
                       ) : (
@@ -1257,11 +1308,11 @@ export default function VisitorManagementPage() {
                       type="button"
                       disabled={actionLoading}
                       onClick={() => void handleReview("APPROVED")}
-                      className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                      className="py-3 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm transition cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 shadow-xs"
                     >
                       {actionLoading ? (
                         <>
-                          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
                           <span>Processing...</span>
                         </>
                       ) : (
@@ -1273,38 +1324,114 @@ export default function VisitorManagementPage() {
               )}
 
               {/* Status Update Actions for Walk-Ins or Approved Visitors */}
-              <div className="pt-2 flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 dark:border-zinc-800">
-                {selectedRequest.status === "CONFIRMED" && (
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => void handleMarkStatus(selectedRequest.request_id, "COMPLETED")}
-                    className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition"
-                  >
-                    Confirm Entry &amp; Mark Completed
-                  </button>
-                )}
-
-                {selectedRequest.status === "APPROVED" && (
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => void handleMarkStatus(selectedRequest.request_id, "COMPLETED")}
-                    className="py-2 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition"
-                  >
-                    Mark Visit Completed
-                  </button>
-                )}
-
+              <div className="pt-3 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 dark:border-zinc-800">
                 <button
                   type="button"
-                  onClick={closeRequestModal}
-                  className="py-2 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+                  disabled={actionLoading}
+                  onClick={() => setDeleteTarget(selectedRequest)}
+                  className="py-2.5 px-4 rounded-xl border border-rose-200 dark:border-rose-800/70 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-sm font-bold transition cursor-pointer disabled:opacity-60"
                 >
-                  Close
+                  Delete Record
                 </button>
+
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {selectedRequest.status === "CONFIRMED" && (
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => void handleMarkStatus(selectedRequest.request_id, "COMPLETED")}
+                      className="py-2.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-xs transition cursor-pointer"
+                    >
+                      Confirm Entry &amp; Mark Completed
+                    </button>
+                  )}
+
+                  {selectedRequest.status === "APPROVED" && (
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => void handleMarkStatus(selectedRequest.request_id, "COMPLETED")}
+                      className="py-2.5 px-5 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white font-bold text-sm transition cursor-pointer shadow-xs"
+                    >
+                      Mark Visit Completed
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={closeRequestModal}
+                    className="py-2.5 px-6 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-sm font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ── Modal: Confirm Delete Visitor Record ── */}
+      {deleteTarget &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-modal-backdrop-in"
+            onClick={() => !deleteLoading && setDeleteTarget(null)}
+          >
+            <div
+              className="relative w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-2xl text-zinc-900 dark:text-zinc-100 animate-modal-panel-in"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-black text-zinc-900 dark:text-white">
+                    Delete Visitor Record?
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    Are you sure you want to permanently delete request{" "}
+                    <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                      #{deleteTarget.request_id}
+                    </span>{" "}
+                    for{" "}
+                    <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                      {deleteTarget.visitor?.full_name || "this visitor"}
+                    </span>
+                    ? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={deleteLoading}
+                  onClick={() => setDeleteTarget(null)}
+                  className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleteLoading}
+                  onClick={() => void handleDeleteRequest()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer disabled:opacity-60 flex items-center gap-2 shadow-xs"
+                >
+                  {deleteLoading ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    "Delete"
+                  )}
+                </button>
+              </div>
             </div>
           </div>,
           document.body

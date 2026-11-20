@@ -230,9 +230,7 @@ class _ResidentNotificationsScreenState
                                       ref.refresh(notificationsProvider);
                                     },
                                     style: TextButton.styleFrom(
-                                      backgroundColor: Theme.of(context).brightness == Brightness.dark
-                                          ? AppColors.primary.withValues(alpha: 0.20)
-                                          : AppColors.primarySubtle,
+                                      backgroundColor: AppColors.palette.accentSoft,
                                       padding: EdgeInsets.symmetric(
                                         horizontal: 10.w,
                                         vertical: 5.h,
@@ -240,7 +238,7 @@ class _ResidentNotificationsScreenState
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(20.r),
                                         side: BorderSide(
-                                          color: AppColors.primary.withValues(alpha: 0.25),
+                                          color: AppColors.palette.accent.withValues(alpha: 0.25),
                                         ),
                                       ),
                                       minimumSize: Size.zero,
@@ -249,9 +247,7 @@ class _ResidentNotificationsScreenState
                                     child: Text(
                                       'Mark Read',
                                       style: TextStyle(
-                                        color: Theme.of(context).brightness == Brightness.dark
-                                            ? const Color(0xFF86EFAC)
-                                            : AppColors.primary,
+                                        color: AppColors.palette.accentText,
                                         fontSize: 12.sp,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -365,7 +361,7 @@ class _ResidentNotificationsScreenState
                               Container(
                                 width: 52.r,
                                 height: 52.r,
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   color: AppColors.primaryLight,
                                   shape: BoxShape.circle,
                                 ),
@@ -703,9 +699,15 @@ class _NotificationTile extends ConsumerWidget {
         );
       },
       onDismissed: (_) async {
-        await ref.read(residentServiceProvider).deleteNotification(notif.id);
+        final success = await ref
+            .read(residentServiceProvider)
+            .deleteNotification(notif.id);
         if (context.mounted) {
-          ToastHelper.showSuccess(context, 'Notification deleted');
+          if (success) {
+            ToastHelper.showSuccess(context, 'Notification deleted');
+          } else {
+            ToastHelper.showError(context, 'Failed to delete notification');
+          }
           // ignore: unused_result
           ref.refresh(notificationsProvider);
         }
@@ -746,16 +748,12 @@ class _NotificationTile extends ConsumerWidget {
         decoration: BoxDecoration(
           color: notif.isRead
               ? Theme.of(context).cardColor
-              : (Theme.of(context).brightness == Brightness.dark
-                  ? AppColors.primary.withValues(alpha: 0.12)
-                  : AppColors.primarySubtle),
+              : AppColors.palette.notifUnreadBg,
           borderRadius: BorderRadius.circular(18.r),
           border: Border.all(
             color: notif.isRead
                 ? Theme.of(context).dividerColor.withValues(alpha: 0.6)
-                : (Theme.of(context).brightness == Brightness.dark
-                    ? AppColors.primary.withValues(alpha: 0.40)
-                    : AppColors.primary.withValues(alpha: 0.35)),
+                : AppColors.palette.notifUnreadBorder,
             width: 1,
           ),
           boxShadow: [
@@ -781,23 +779,15 @@ class _NotificationTile extends ConsumerWidget {
                     height: 40.r,
                     decoration: BoxDecoration(
                       color: notif.isRead
-                          ? (Theme.of(context).brightness == Brightness.dark
-                              ? const Color(0xFF262626)
-                              : AppColors.surfaceMuted)
-                          : (Theme.of(context).brightness == Brightness.dark
-                              ? AppColors.primary.withValues(alpha: 0.22)
-                              : AppColors.primaryLight),
+                          ? AppColors.surfaceMuted
+                          : AppColors.palette.notifIconBg,
                       borderRadius: BorderRadius.circular(12.r),
                     ),
                     child: Icon(
                       Icons.notifications_rounded,
                       color: notif.isRead
-                          ? (Theme.of(context).brightness == Brightness.dark
-                              ? const Color(0xFF94A3B8)
-                              : AppColors.textSecondary)
-                          : (Theme.of(context).brightness == Brightness.dark
-                              ? const Color(0xFF4ADE80)
-                              : AppColors.primary),
+                          ? AppColors.textSecondary
+                          : AppColors.palette.notifIconColor,
                       size: 20.r,
                     ),
                   ),
@@ -827,8 +817,8 @@ class _NotificationTile extends ConsumerWidget {
                                 width: 8.r,
                                 height: 8.r,
                                 margin: EdgeInsets.only(right: 6.w),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.primary,
+                                decoration: BoxDecoration(
+                                  color: AppColors.palette.unreadDot,
                                   shape: BoxShape.circle,
                                 ),
                               ),

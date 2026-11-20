@@ -38,10 +38,23 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
   final _guestFormKey = GlobalKey<FormState>();
   final List<_GuestEntry> _guestEntries = [_GuestEntry()];
   final _guestDateCtrl = TextEditingController();
+  final _guestTimeCtrl = TextEditingController(text: '08:00 AM');
+  final _guestEndDateCtrl = TextEditingController();
+  final _guestEndTimeCtrl = TextEditingController(text: '11:59 PM');
+  String _selectedDuration = '1_day';
   final _guestReasonCtrl = TextEditingController();
   bool _isSubmittingGuest = false;
   final _recentNotifScrollCtrl = ScrollController();
   final _modalNotifScrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _guestDateCtrl.text =
+        "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    _guestEndDateCtrl.text = _guestDateCtrl.text;
+  }
 
   @override
   void dispose() {
@@ -49,6 +62,9 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
       entry.dispose();
     }
     _guestDateCtrl.dispose();
+    _guestTimeCtrl.dispose();
+    _guestEndDateCtrl.dispose();
+    _guestEndTimeCtrl.dispose();
     _guestReasonCtrl.dispose();
     _recentNotifScrollCtrl.dispose();
     _modalNotifScrollCtrl.dispose();
@@ -328,6 +344,59 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
     }
   }
 
+  DateTime _parseStartDate() {
+    if (_guestDateCtrl.text.isNotEmpty) {
+      try {
+        return DateTime.parse(_guestDateCtrl.text);
+      } catch (_) {}
+    }
+    return DateTime.now();
+  }
+
+  void _applyDuration(String duration) {
+    final start = _parseStartDate();
+    DateTime end = start;
+
+    switch (duration) {
+      case '1_day':
+        end = start;
+        break;
+      case '1_week':
+        end = start.add(const Duration(days: 7));
+        break;
+      case '1_month':
+        end = DateTime(start.year, start.month + 1, start.day);
+        break;
+      case '6_months':
+        end = DateTime(start.year, start.month + 6, start.day);
+        break;
+      case '1_year':
+        end = DateTime(start.year + 1, start.month, start.day);
+        break;
+      case 'custom':
+        break;
+    }
+
+    setState(() {
+      _selectedDuration = duration;
+      if (duration != 'custom') {
+        _guestEndDateCtrl.text =
+            "${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}";
+      }
+    });
+
+    if (duration == 'custom') {
+      _pickGuestEndDate();
+    }
+  }
+
+  String _formatTimeOfDay(TimeOfDay tod) {
+    final hour = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
+    final minute = tod.minute.toString().padLeft(2, '0');
+    final period = tod.period == DayPeriod.am ? 'AM' : 'PM';
+    return '${hour.toString().padLeft(2, '0')}:$minute $period';
+  }
+
   Future<void> _pickGuestDate() async {
     final now = DateTime.now();
     DateTime initial = now;
@@ -344,12 +413,12 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
       context: context,
       initialDate: initial,
       firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 2),
+      lastDate: DateTime(now.year + 5),
       builder: (context, child) {
         return Theme(
           data: ThemeData.dark().copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF7C3AED),
+              primary: Color(0xFF3B82F6),
               onPrimary: Colors.white,
               surface: Color(0xFF1E2330),
               onSurface: Colors.white,
@@ -368,8 +437,169 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
           "${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
       setState(() {
         _guestDateCtrl.text = formatted;
+        if (_selectedDuration != 'custom') {
+          _applyDuration(_selectedDuration);
+        } else {
+          if (_guestEndDateCtrl.text.isNotEmpty) {
+            try {
+              final end = DateTime.parse(_guestEndDateCtrl.text);
+              if (end.isBefore(picked)) {
+                _guestEndDateCtrl.text = formatted;
+              }
+            } catch (_) {
+              _guestEndDateCtrl.text = formatted;
+            }
+          }
+        }
       });
     }
+  }
+
+  Future<void> _pickGuestTime() async {
+    TimeOfDay initial = const TimeOfDay(hour: 8, minute: 0);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF3B82F6),
+              onPrimary: Colors.white,
+              surface: Color(0xFF1E2330),
+              onSurface: Colors.white,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFF1E2330),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _guestTimeCtrl.text = _formatTimeOfDay(picked);
+      });
+    }
+  }
+
+  Future<void> _pickGuestEndDate() async {
+    final start = _parseStartDate();
+    DateTime initial = start;
+    if (_guestEndDateCtrl.text.isNotEmpty) {
+      try {
+        final parsed = DateTime.parse(_guestEndDateCtrl.text);
+        if (!parsed.isBefore(start)) {
+          initial = parsed;
+        }
+      } catch (_) {}
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: start,
+      lastDate: DateTime(start.year + 5),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF3B82F6),
+              onPrimary: Colors.white,
+              surface: Color(0xFF1E2330),
+              onSurface: Colors.white,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFF1E2330),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final formatted =
+          "${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      setState(() {
+        _guestEndDateCtrl.text = formatted;
+        _selectedDuration = 'custom';
+      });
+    }
+  }
+
+  Future<void> _pickGuestEndTime() async {
+    TimeOfDay initial = const TimeOfDay(hour: 23, minute: 59);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF3B82F6),
+              onPrimary: Colors.white,
+              surface: Color(0xFF1E2330),
+              onSurface: Colors.white,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFF1E2330),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _guestEndTimeCtrl.text = _formatTimeOfDay(picked);
+      });
+    }
+  }
+
+  Widget _buildDurationChip(String label, String key, IconData icon) {
+    final isSelected = _selectedDuration == key;
+    return InkWell(
+      onTap: () => _applyDuration(key),
+      borderRadius: BorderRadius.circular(8.r),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF2563EB)
+              : const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(8.r),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF60A5FA)
+                : const Color(0xFF334155),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13.r,
+              color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+            ),
+            SizedBox(width: 4.w),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.sp,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _submitGuestAccess() async {
@@ -424,6 +654,15 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
         'guest_plate_number': primary['plate_number'],
         'guest_car_model': primary['car_model'],
         'access_date': _guestDateCtrl.text.trim(),
+        'access_time': _guestTimeCtrl.text.trim(),
+        'access_end_date': _guestEndDateCtrl.text.trim().isNotEmpty
+            ? _guestEndDateCtrl.text.trim()
+            : _guestDateCtrl.text.trim(),
+        'access_end_time': _guestEndTimeCtrl.text.trim(),
+        'valid_until': _guestEndDateCtrl.text.trim().isNotEmpty
+            ? _guestEndDateCtrl.text.trim()
+            : _guestDateCtrl.text.trim(),
+        'pass_duration': _selectedDuration,
         'access_reason': _guestReasonCtrl.text.trim(),
         'guests': guestsData,
       });
@@ -434,7 +673,13 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
       _guestEntries.clear();
       _guestEntries.add(_GuestEntry());
 
-      _guestDateCtrl.clear();
+      final now = DateTime.now();
+      _guestDateCtrl.text =
+          "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      _guestTimeCtrl.text = '08:00 AM';
+      _guestEndDateCtrl.text = _guestDateCtrl.text;
+      _guestEndTimeCtrl.text = '11:59 PM';
+      _selectedDuration = '1_day';
       _guestReasonCtrl.clear();
 
       ref.invalidate(myUpdateRequestsProvider);
@@ -545,7 +790,8 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (user) {
-          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final p = AppColors.palette;
+          final isDark = p.isDark;
           final logs = logsAsync.value ?? [];
           final notifs = notifsAsync.value ?? [];
           final requests = requestsAsync.value ?? [];
@@ -600,9 +846,8 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  const Color(0xFF14532D).withValues(alpha: 0.94),
-                                  const Color(0xFF15803D).withValues(alpha: 0.88),
-                                  const Color(0xFF16A34A).withValues(alpha: 0.88),
+                                  p.heroFrom.withValues(alpha: 0.94),
+                                  p.heroTo.withValues(alpha: 0.88),
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
@@ -714,9 +959,11 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                       ? _formatPhilippineDate(lastEntry.loggedAt)
                                       : 'No recent activity',
                                   badge: lastEntry.loggedAt.isNotEmpty ? 'AUTHORIZED' : null,
-                                  badgeColor: const Color(0xFF10B981),
+                                  badgeColor: p.authorizedPillText,
+                                  badgeBgColor: p.authorizedPillBg,
                                   icon: Icons.arrow_downward_rounded,
-                                  iconColor: const Color(0xFF10B981),
+                                  iconColor: p.authorizedPillText,
+                                  iconBgColor: p.authorizedPillBg,
                                 ),
                               ),
                               SizedBox(width: 10.w),
@@ -730,9 +977,11 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                       ? _formatPhilippineDate(lastExit.loggedAt)
                                       : 'No recent activity',
                                   badge: lastExit.loggedAt.isNotEmpty ? 'AUTHORIZED' : null,
-                                  badgeColor: const Color(0xFF3B82F6),
+                                  badgeColor: p.exitPillText,
+                                  badgeBgColor: p.exitPillBg,
                                   icon: Icons.arrow_upward_rounded,
-                                  iconColor: const Color(0xFF3B82F6),
+                                  iconColor: p.exitPillText,
+                                  iconBgColor: p.exitPillBg,
                                 ),
                               ),
                               SizedBox(width: 10.w),
@@ -746,7 +995,8 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                       : null,
                                   badgeColor: const Color(0xFFEF4444),
                                   icon: Icons.lock_outline_rounded,
-                                  iconColor: const Color(0xFF10B981),
+                                  iconColor: p.accentText,
+                                  iconBgColor: p.accentSoft,
                                 ),
                               ),
                             ],
@@ -881,16 +1131,12 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                         decoration: BoxDecoration(
                                           color: notif.isRead
                                               ? Theme.of(context).cardColor
-                                              : (Theme.of(context).brightness == Brightness.dark
-                                                  ? AppColors.primary.withValues(alpha: 0.12)
-                                                  : AppColors.primarySubtle),
+                                              : p.notifUnreadBg,
                                           borderRadius: BorderRadius.circular(16.r),
                                           border: Border.all(
                                             color: notif.isRead
                                                 ? Theme.of(context).dividerColor.withValues(alpha: 0.45)
-                                                : (Theme.of(context).brightness == Brightness.dark
-                                                    ? AppColors.primary.withValues(alpha: 0.40)
-                                                    : AppColors.primary.withValues(alpha: 0.35)),
+                                                : p.notifUnreadBorder,
                                             width: 1,
                                           ),
                                         ),
@@ -922,8 +1168,8 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                                           width: 8.r,
                                                           height: 8.r,
                                                           margin: EdgeInsets.only(right: 6.w),
-                                                          decoration: const BoxDecoration(
-                                                            color: Color(0xFF3B82F6),
+                                                          decoration: BoxDecoration(
+                                                            color: p.unreadDot,
                                                             shape: BoxShape.circle,
                                                           ),
                                                         ),
@@ -992,13 +1238,13 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                                                                 'Details',
                                                                 style: TextStyle(
                                                                   fontSize: 10.5.sp,
-                                                                  color: const Color(0xFF60A5FA),
-                                                                  fontWeight: FontWeight.w600,
+                                                                  color: p.accentText,
+                                                                  fontWeight: FontWeight.w700,
                                                                 ),
                                                               ),
                                                               Icon(
                                                                 Icons.chevron_right_rounded,
-                                                                color: const Color(0xFF60A5FA),
+                                                                color: p.accentText,
                                                                 size: 14.r,
                                                               ),
                                                             ],
@@ -1826,29 +2072,165 @@ class _ResidentHomeScreenState extends ConsumerState<ResidentHomeScreen> {
                           ),
                           SizedBox(height: 14.h),
 
-                          _ModalSectionHeading(title: 'Access Details (All Guests in Ticket)'),
-                          SizedBox(height: 8.h),
-                          _DarkModalInput(
-                            label: 'Access Date *',
-                            controller: _guestDateCtrl,
-                            hint: 'Select access date',
-                            required: true,
-                            readOnly: true,
-                            onTap: _pickGuestDate,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                Icons.calendar_month_rounded,
-                                size: 18.r,
-                                color: const Color(0xFF93C5FD),
-                              ),
-                              onPressed: _pickGuestDate,
+                          _ModalSectionHeading(title: 'Access Details & Pass Validity'),
+                          SizedBox(height: 4.h),
+                          Text(
+                            'Guards issue 1-day passes by default. As a resident, you can authorize and extend visits for 1 day, 1 month, or up to 1 year.',
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              color: const Color(0xFF94A3B8),
                             ),
                           ),
+                          SizedBox(height: 10.h),
+
+                          // Quick Duration Presets (1 Day, 1 Week, 1 Month, 6 Months, 1 Year, Custom)
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _buildDurationChip('1 Day', '1_day', Icons.today_rounded),
+                                SizedBox(width: 6.w),
+                                _buildDurationChip('1 Week', '1_week', Icons.date_range_rounded),
+                                SizedBox(width: 6.w),
+                                _buildDurationChip('1 Month', '1_month', Icons.calendar_month_rounded),
+                                SizedBox(width: 6.w),
+                                _buildDurationChip('6 Months', '6_months', Icons.event_repeat_rounded),
+                                SizedBox(width: 6.w),
+                                _buildDurationChip('1 Year', '1_year', Icons.verified_user_rounded),
+                                SizedBox(width: 6.w),
+                                _buildDurationChip('Custom', 'custom', Icons.edit_calendar_rounded),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 10.h),
+
+                          // Validity Summary Card
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 9.h),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withAlpha(18),
+                              borderRadius: BorderRadius.circular(10.r),
+                              border: Border.all(color: const Color(0xFF10B981).withAlpha(70)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.verified_rounded,
+                                  size: 16.r,
+                                  color: const Color(0xFF34D399),
+                                ),
+                                SizedBox(width: 8.w),
+                                Expanded(
+                                  child: Text(
+                                    'Gate Pass Active: ${_guestDateCtrl.text.isNotEmpty ? _guestDateCtrl.text : "Today"} ${_guestTimeCtrl.text} → ${_guestEndDateCtrl.text.isNotEmpty ? _guestEndDateCtrl.text : (_guestDateCtrl.text.isNotEmpty ? _guestDateCtrl.text : "Today")} ${_guestEndTimeCtrl.text}',
+                                    style: TextStyle(
+                                      fontSize: 11.sp,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF6EE7B7),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 12.h),
+
+                          // Start Date & Time
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: _DarkModalInput(
+                                  label: 'Visit Start Date *',
+                                  controller: _guestDateCtrl,
+                                  hint: 'Start date',
+                                  required: true,
+                                  readOnly: true,
+                                  onTap: _pickGuestDate,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      Icons.calendar_month_rounded,
+                                      size: 18.r,
+                                      color: const Color(0xFF93C5FD),
+                                    ),
+                                    onPressed: _pickGuestDate,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              Expanded(
+                                flex: 2,
+                                child: _DarkModalInput(
+                                  label: 'Start Time *',
+                                  controller: _guestTimeCtrl,
+                                  hint: '08:00 AM',
+                                  required: true,
+                                  readOnly: true,
+                                  onTap: _pickGuestTime,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      Icons.access_time_rounded,
+                                      size: 18.r,
+                                      color: const Color(0xFF93C5FD),
+                                    ),
+                                    onPressed: _pickGuestTime,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                           SizedBox(height: 8.h),
+
+                          // Valid Until Date & Time
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: _DarkModalInput(
+                                  label: 'Valid Until Date *',
+                                  controller: _guestEndDateCtrl,
+                                  hint: 'End date',
+                                  required: true,
+                                  readOnly: true,
+                                  onTap: _pickGuestEndDate,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      Icons.event_available_rounded,
+                                      size: 18.r,
+                                      color: const Color(0xFF34D399),
+                                    ),
+                                    onPressed: _pickGuestEndDate,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              Expanded(
+                                flex: 2,
+                                child: _DarkModalInput(
+                                  label: 'End Time *',
+                                  controller: _guestEndTimeCtrl,
+                                  hint: '11:59 PM',
+                                  required: true,
+                                  readOnly: true,
+                                  onTap: _pickGuestEndTime,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      Icons.access_time_filled_rounded,
+                                      size: 18.r,
+                                      color: const Color(0xFF34D399),
+                                    ),
+                                    onPressed: _pickGuestEndTime,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 8.h),
+
                           _DarkModalInput(
                             label: 'Reason for Access *',
                             controller: _guestReasonCtrl,
-                            hint: 'Family visit, delivery, etc.',
+                            hint: 'Family visit, staying for 1 month, contractor, delivery, etc.',
                             required: true,
                           ),
                           SizedBox(height: 18.h),
@@ -2038,8 +2420,10 @@ class _SummaryCardTile extends StatelessWidget {
   final String? subText;
   final String? badge;
   final Color badgeColor;
+  final Color? badgeBgColor;
   final IconData icon;
   final Color iconColor;
+  final Color? iconBgColor;
 
   const _SummaryCardTile({
     required this.title,
@@ -2047,8 +2431,10 @@ class _SummaryCardTile extends StatelessWidget {
     this.subText,
     this.badge,
     required this.badgeColor,
+    this.badgeBgColor,
     required this.icon,
     required this.iconColor,
+    this.iconBgColor,
   });
 
   @override
@@ -2090,7 +2476,7 @@ class _SummaryCardTile extends StatelessWidget {
               Container(
                 padding: EdgeInsets.all(5.r),
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.15),
+                  color: iconBgColor ?? iconColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: iconColor, size: 15.r),
@@ -2122,7 +2508,7 @@ class _SummaryCardTile extends StatelessWidget {
             Container(
               padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
               decoration: BoxDecoration(
-                color: badgeColor.withValues(alpha: 0.15),
+                color: badgeBgColor ?? badgeColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12.r),
               ),
               child: Text(
@@ -2529,7 +2915,7 @@ class _DarkModalInput extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8.r),
-              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
             ),
           ),
         ),

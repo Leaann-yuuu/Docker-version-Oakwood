@@ -18,6 +18,7 @@ class VisitorRequest extends Model
         'guard_id',
         'requested_by',
         'visit_date',
+        'visit_end_date',
         'visit_time',
         'purpose',
         'status',

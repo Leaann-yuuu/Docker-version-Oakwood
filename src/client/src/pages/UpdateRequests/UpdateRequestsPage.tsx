@@ -50,6 +50,7 @@ const UpdateRequestsPage = () => {
         setSelectedRequest(null);
         setLoading(true);
         load(filter);
+        window.dispatchEvent(new Event('notifications_updated'));
     };
 
     const stats = useMemo(() => ({
@@ -199,7 +200,19 @@ const RequestModal = ({ request, onClose, onApprove, onReject }: { request: Upda
                             <div className="grid gap-4 text-sm md:grid-cols-4">
                                 <Mini label={guest ? "Host/Resident" : "Resident"} value={residentName(request)} />
                                 <Mini label={guest ? "Guest Vehicle Plate" : "Current Plate"} value={guest ? String(request.requested_changes.guest_plate_number ?? "N/A") : request.resident?.plate_number ?? "N/A"} mono />
-                                <Mini label={guest ? "Access Date" : "Resident ID"} value={guest ? formatMaybeDate(request.requested_changes.access_date) : `#${request.user_id}`} />
+                                <Mini
+                                    label={guest ? "Access Validity" : "Resident ID"}
+                                    value={
+                                        guest
+                                            ? `${formatMaybeDate(request.requested_changes.access_date)}${
+                                                  request.requested_changes.access_end_date &&
+                                                  request.requested_changes.access_end_date !== request.requested_changes.access_date
+                                                      ? ` → ${formatMaybeDate(request.requested_changes.access_end_date)}`
+                                                      : ""
+                                              }`
+                                            : `#${request.user_id}`
+                                    }
+                                />
                                 <Mini label="Submitted" value={new Date(request.created_at).toLocaleString()} />
                             </div>
                         </div>
@@ -275,6 +288,11 @@ const GuestDetails = ({ request }: { request: UpdateRequestItem }) => {
                     </DetailBlock>
                 </>
             )}
+            <DetailBlock tone="purple" title="Pass Validity & Authorization Period">
+                <DetailTile tone="purple" label="Start Date & Time" value={`${String(changes.access_date ?? "N/A")} ${String(changes.access_time ?? "")}`.trim()} />
+                <DetailTile tone="purple" label="Valid Until Date & Time" value={`${String(changes.access_end_date ?? changes.valid_until ?? changes.access_date ?? "N/A")} ${String(changes.access_end_time ?? "")}`.trim()} />
+                <DetailTile tone="purple" label="Pass Duration Preset" value={String(changes.pass_duration ?? "1_day").replace(/_/g, " ").toUpperCase()} />
+            </DetailBlock>
             <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:border-purple-700 dark:bg-purple-900/20">
                 <h4 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Reason for Access</h4>
                 <p className="text-sm text-zinc-900 dark:text-zinc-100">{String(request.requested_changes.access_reason ?? "N/A")}</p>

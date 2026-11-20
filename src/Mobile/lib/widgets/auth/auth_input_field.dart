@@ -148,7 +148,7 @@ class _AuthInputFieldState extends State<AuthInputField> {
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14.r),
                 borderSide: const BorderSide(
-                  color: Color(0xFFF87171),
+                  color: Color(0x99F87171),
                   width: 1,
                 ),
               ),
@@ -159,21 +159,13 @@ class _AuthInputFieldState extends State<AuthInputField> {
                   width: 1.5,
                 ),
               ),
-              errorStyle: const TextStyle(height: 0, fontSize: 0),
-            ),
-          ),
-
-          // ── Error Message Below ──────────────────────────────────────────
-          if (hasError) ...[
-            SizedBox(height: 6.h),
-            Text(
-              widget.errorText!,
-              style: TextStyle(
-                color: const Color(0xFFF87171),
-                fontSize: 12.sp,
+              errorText: hasError ? widget.errorText : null,
+              errorStyle: TextStyle(
+                fontSize: 11.5.sp,
+                color: const Color(0xFFFCA5A5),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );

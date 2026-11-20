@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\Visitor;
 use App\Models\VisitorRequest;
+use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -337,14 +338,19 @@ class GateService
             ];
         }
 
-        // 3. Active Visitor Passes (tbl_visitor_requests + tbl_visitors)
-        $visitorRequests = VisitorRequest::with('visitor')
-            ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED'])
-            ->orderByDesc('visit_date')
+        // 3. Active Visitor Passes (tbl_visitor_requests + tbl_visitors) — strictly valid for today's stay window
+        $today = now()->toDateString();
+        $visitorRequests = self::scopeVisitorRequestActiveForDate(
+            VisitorRequest::with('visitor')->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED']),
+            $today
+        )
             ->orderByDesc('request_id')
             ->get();
 
         foreach ($visitorRequests as $vr) {
+            if (! self::isVisitorPassValidForToday($vr)) {
+                continue;
+            }
             $visitor = $vr->visitor;
             if (! $visitor || ! $visitor->vehicle_plate) {
                 continue;
@@ -365,21 +371,16 @@ class GateService
         }
 
         // 4. Approved Guest Access Requests for today (tbl_update_requests)
-        $today = now()->toDateString();
         $guestRequests = UpdateRequest::with('resident')
             ->where('status', 'approved')
             ->whereDate('created_at', '<=', now())
             ->get();
 
         foreach ($guestRequests as $req) {
+            if (! self::isGuestRequestValidForToday($req)) {
+                continue;
+            }
             $changes = $req->requested_changes ?? [];
-            if (($changes['request_type'] ?? null) !== 'guest_access') {
-                continue;
-            }
-            $accessDate = $changes['access_date'] ?? null;
-            if (! $accessDate || date('Y-m-d', strtotime($accessDate)) !== $today) {
-                continue;
-            }
             $primaryPlate = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $changes['guest_plate_number'] ?? ''));
             if ($primaryPlate !== '' && ! isset($plates[$primaryPlate])) {
                 $plates[$primaryPlate] = [
@@ -475,7 +476,7 @@ class GateService
         // 3. Check for valid Visitor Pass (tbl_visitors + tbl_visitor_requests)
         [$visitorRequest, $visitor] = self::findVisitorPassByPlate($normalizedPlate);
 
-        if ($visitorRequest || $visitor) {
+        if ($visitorRequest && $visitor) {
             return [
                 'resident' => null,
                 'visitorRequest' => $visitorRequest,
@@ -490,17 +491,11 @@ class GateService
             ->whereDate('created_at', '<=', now())
             ->get()
             ->first(function (UpdateRequest $request) use ($normalizedPlate) {
+                if (! self::isGuestRequestValidForToday($request)) {
+                    return false;
+                }
+
                 $changes = $request->requested_changes ?? [];
-
-                if (($changes['request_type'] ?? null) !== 'guest_access') {
-                    return false;
-                }
-
-                $accessDate = $changes['access_date'] ?? null;
-                $isDateValid = $accessDate && date('Y-m-d', strtotime($accessDate)) === now()->toDateString();
-                if (!$isDateValid) {
-                    return false;
-                }
 
                 $guestPlate = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $changes['guest_plate_number'] ?? ''));
                 if ($guestPlate === $normalizedPlate) {
@@ -542,7 +537,7 @@ class GateService
 
             // 6. Fuzzy match for visitor passes (Levenshtein)
             [$visitorRequest, $visitor] = self::findClosestVisitorPlate($normalizedPlate);
-            if ($visitorRequest || $visitor) {
+            if ($visitorRequest && $visitor) {
                 return [
                     'resident' => null,
                     'visitorRequest' => $visitorRequest,
@@ -561,20 +556,88 @@ class GateService
     }
 
     /**
-     * Finds an authorized visitor pass by plate number.
+     * Constrains a VisitorRequest query to passes whose stay window covers $date.
+     */
+    private static function scopeVisitorRequestActiveForDate($query, string $date)
+    {
+        return $query->whereDate('visit_date', '<=', $date)
+            ->where(function ($q) use ($date) {
+                $q->whereDate('visit_end_date', '>=', $date)
+                  ->orWhere(function ($q2) use ($date) {
+                      $q2->whereNull('visit_end_date')->whereDate('visit_date', $date);
+                  });
+            });
+    }
+
+    /**
+     * Checks whether a VisitorRequest is strictly scheduled for today's date (or stay window).
+     */
+    private static function isVisitorPassValidForToday(VisitorRequest $request): bool
+    {
+        if (! $request->visit_date) {
+            return false;
+        }
+
+        try {
+            $start = Carbon::parse($request->visit_date)->toDateString();
+            $end = $request->visit_end_date
+                ? Carbon::parse($request->visit_end_date)->toDateString()
+                : $start;
+            $today = now()->toDateString();
+
+            return $today >= $start && $today <= $end;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Checks whether a guest_access UpdateRequest covers today's date.
+     */
+    private static function isGuestRequestValidForToday(UpdateRequest $request): bool
+    {
+        $changes = $request->requested_changes ?? [];
+        if (($changes['request_type'] ?? null) !== 'guest_access') {
+            return false;
+        }
+
+        $startDate = $changes['access_date'] ?? null;
+        if (! $startDate) {
+            return false;
+        }
+
+        try {
+            $start = Carbon::parse($startDate)->toDateString();
+            $endDate = $changes['access_end_date'] ?? $changes['valid_until'] ?? $startDate;
+            $end = $endDate ? Carbon::parse($endDate)->toDateString() : $start;
+        } catch (\Throwable) {
+            return false;
+        }
+
+        $today = now()->toDateString();
+
+        return $today >= $start && $today <= $end;
+    }
+
+    /**
+     * Finds an authorized visitor pass by plate number strictly for today's visit_date.
      *
      * @return array{0: ?VisitorRequest, 1: ?Visitor}
      */
     private static function findVisitorPassByPlate(string $normalizedPlate): array
     {
-        // 1. Direct query matching normalized plate
-        $requests = VisitorRequest::with(['visitor', 'resident', 'securityGuard'])
-            ->whereHas('visitor', function ($q) use ($normalizedPlate) {
-                $q->whereNotNull('vehicle_plate')
-                  ->whereRaw("UPPER(REPLACE(REPLACE(REPLACE(vehicle_plate, ' ', ''), '-', ''), '.', '')) = ?", [$normalizedPlate]);
-            })
-            ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED'])
-            ->orderByDesc('visit_date')
+        $today = now()->toDateString();
+
+        // 1. Direct query matching normalized plate for today's stay window
+        $requests = self::scopeVisitorRequestActiveForDate(
+            VisitorRequest::with(['visitor', 'resident', 'securityGuard'])
+                ->whereHas('visitor', function ($q) use ($normalizedPlate) {
+                    $q->whereNotNull('vehicle_plate')
+                      ->whereRaw("UPPER(REPLACE(REPLACE(REPLACE(vehicle_plate, ' ', ''), '-', ''), '.', '')) = ?", [$normalizedPlate]);
+                })
+                ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED']),
+            $today
+        )
             ->orderByDesc('request_id')
             ->get();
 
@@ -587,66 +650,27 @@ class GateService
 
             if ($matchingVisitors->isNotEmpty()) {
                 $visitorIds = $matchingVisitors->pluck('visitor_id');
-                $requests = VisitorRequest::with(['visitor', 'resident', 'securityGuard'])
-                    ->whereIn('visitor_id', $visitorIds)
-                    ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED'])
-                    ->orderByDesc('visit_date')
+                $requests = self::scopeVisitorRequestActiveForDate(
+                    VisitorRequest::with(['visitor', 'resident', 'securityGuard'])
+                        ->whereIn('visitor_id', $visitorIds)
+                        ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED']),
+                    $today
+                )
                     ->orderByDesc('request_id')
                     ->get();
             }
         }
 
         if ($requests->isNotEmpty()) {
-            $today = now()->toDateString();
-            $yesterday = now()->subDay()->toDateString();
-            $tomorrow = now()->addDay()->toDateString();
+            $validToday = $requests->filter(fn ($r) => self::isVisitorPassValidForToday($r));
 
-            // Prioritize: pass for today (or created today)
-            $bestMatch = $requests->first(function ($r) use ($today) {
-                $visitDate = $r->visit_date ? date('Y-m-d', strtotime($r->visit_date)) : null;
-                $createdDate = date('Y-m-d', strtotime($r->created_at));
-                return ($visitDate === $today || $createdDate === $today);
-            });
-
-            // Next prioritize within ±1 day window
-            if (! $bestMatch) {
-                $bestMatch = $requests->first(function ($r) use ($yesterday, $tomorrow) {
-                    $visitDate = $r->visit_date ? date('Y-m-d', strtotime($r->visit_date)) : null;
-                    return $visitDate && $visitDate >= $yesterday && $visitDate <= $tomorrow;
-                });
-            }
-
-            // Next prioritize active status (APPROVED, CONFIRMED, COMPLETED)
-            if (! $bestMatch) {
-                $bestMatch = $requests->first(function ($r) {
-                    return in_array($r->status, ['APPROVED', 'CONFIRMED', 'COMPLETED']);
-                });
-            }
-
-            // Fallback to latest non-denied request for this plate
-            if (! $bestMatch) {
-                $bestMatch = $requests->first();
-            }
+            $bestMatch = $validToday->first(function ($r) {
+                return in_array($r->status, ['APPROVED', 'CONFIRMED', 'COMPLETED'], true);
+            }) ?? $validToday->first();
 
             if ($bestMatch) {
                 return [$bestMatch, $bestMatch->visitor];
             }
-        }
-
-        // If visitor exists in tbl_visitors matching this plate
-        $visitor = Visitor::whereNotNull('vehicle_plate')->get()->first(function ($v) use ($normalizedPlate) {
-            $cleaned = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $v->vehicle_plate ?? ''));
-            return $cleaned === $normalizedPlate;
-        });
-
-        if ($visitor) {
-            $latestReq = VisitorRequest::with(['visitor', 'resident'])
-                ->where('visitor_id', $visitor->visitor_id)
-                ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED'])
-                ->latest('request_id')
-                ->first();
-
-            return [$latestReq, $visitor];
         }
 
         return [null, null];
@@ -674,12 +698,14 @@ class GateService
      */
     private static function findClosestVisitorPlate(string $normalizedPlate): array
     {
-        $activeRequests = VisitorRequest::with(['visitor', 'resident'])
-            ->whereHas('visitor', function ($q) {
-                $q->whereNotNull('vehicle_plate');
-            })
-            ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED'])
-            ->orderByDesc('visit_date')
+        $activeRequests = self::scopeVisitorRequestActiveForDate(
+            VisitorRequest::with(['visitor', 'resident'])
+                ->whereHas('visitor', function ($q) {
+                    $q->whereNotNull('vehicle_plate');
+                })
+                ->whereNotIn('status', ['DENIED', 'REJECTED', 'CANCELLED']),
+            now()->toDateString()
+        )
             ->orderByDesc('request_id')
             ->get();
 
@@ -688,6 +714,9 @@ class GateService
         $bestDistance = 2;
 
         foreach ($activeRequests as $req) {
+            if (! self::isVisitorPassValidForToday($req)) {
+                continue;
+            }
             $registered = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $req->visitor?->vehicle_plate ?? ''));
             if ($registered === '' || abs(strlen($registered) - strlen($normalizedPlate)) > 1) {
                 continue;

@@ -606,7 +606,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                   DropdownButtonFormField<String>(
                     initialValue: _selectedVehicleType,
                     dropdownColor: const Color(0xFF23153C),
-                    iconEnabledColor: const Color(0xCCDDD6FE),
+                    icon: const Icon(
+                      Icons.arrow_drop_down,
+                      color: Color(0xE6DDD6FE),
+                    ),
+                    iconEnabledColor: const Color(0xE6DDD6FE),
+                    iconDisabledColor: const Color(0x66DDD6FE),
+                    hint: Text(
+                      'Select vehicle type',
+                      style: TextStyle(
+                        color: const Color(0xE6DDD6FE),
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 14.5.sp,
@@ -619,7 +632,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                       contentPadding: EdgeInsets.only(bottom: 8.h, top: 4.h),
                       hintText: 'Select vehicle type',
                       hintStyle: TextStyle(
-                        color: const Color(0xB3DDD6FE), // Clearly readable light lavender text
+                        color: const Color(0xE6DDD6FE),
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w400,
                       ),

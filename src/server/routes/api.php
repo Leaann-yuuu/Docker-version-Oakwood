@@ -95,6 +95,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/guard-create', 'guardCreate');
             Route::put('/guard-review/{id}', 'guardReview');
             Route::put('/status/{id}', 'updateStatus');
+            Route::delete('/guard-delete/{id}', 'guardDelete');
         });
     });
 
@@ -115,6 +116,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/my-requests', 'loadResidentRequests');
             Route::put('/resident-respond/{id}', 'residentRespond');
             Route::put('/resident-cancel/{id}', 'residentCancel');
+            Route::put('/resident-extend/{id}', 'residentExtendDuration');
+            Route::delete('/resident-delete/{id}', 'residentDelete');
             Route::get('/summary', 'summary');
         });
 

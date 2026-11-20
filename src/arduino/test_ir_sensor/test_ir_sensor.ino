@@ -67,7 +67,7 @@ void loop() {
        */
       if (currentReading == LOW) {
         // 1 = BLOCKED
-        digitalWrite(LED_PIN, HIGH);ZX
+        digitalWrite(LED_PIN, HIGH);
         Serial.println(F("1  (BLOCKED - Obstacle detected)"));
       } else {
         // 0 = CLEAR

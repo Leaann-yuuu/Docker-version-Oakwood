@@ -50,12 +50,25 @@ class UpdateRequestController extends Controller
                 'guest_car_model' => ['nullable', 'max:55'],
                 'guest_car_color' => ['nullable', 'max:55'],
                 'access_date' => ['nullable', 'date'],
+                'access_time' => ['nullable', 'string', 'max:50'],
+                'access_end_date' => ['nullable', 'date'],
+                'access_end_time' => ['nullable', 'string', 'max:50'],
+                'valid_until' => ['nullable', 'date'],
+                'pass_duration' => ['nullable', 'string', 'max:50'],
                 'access_reason' => ['required', 'max:500'],
                 'guests' => ['nullable', 'array'],
             ]);
 
             if (empty($validated['access_date'])) {
                 $validated['access_date'] = now()->toDateString();
+            }
+
+            if (empty($validated['access_end_date'])) {
+                $validated['access_end_date'] = !empty($validated['valid_until']) ? $validated['valid_until'] : $validated['access_date'];
+            }
+
+            if (empty($validated['valid_until'])) {
+                $validated['valid_until'] = $validated['access_end_date'];
             }
 
             if (! empty($validated['guest_plate_number'])) {
@@ -160,6 +173,7 @@ class UpdateRequestController extends Controller
                         'guard_id' => null,
                         'requested_by' => 'resident',
                         'visit_date' => !empty($changes['access_date']) ? $changes['access_date'] : now()->toDateString(),
+                        'visit_end_date' => !empty($changes['access_end_date']) ? $changes['access_end_date'] : (!empty($changes['access_date']) ? $changes['access_date'] : now()->toDateString()),
                         'visit_time' => !empty($changes['access_time']) ? $changes['access_time'] : '10:00 AM',
                         'purpose' => !empty($changes['access_reason']) ? $changes['access_reason'] : 'Guest Visit',
                         'status' => 'PENDING',

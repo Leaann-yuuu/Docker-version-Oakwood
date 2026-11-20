@@ -10,6 +10,7 @@ except ImportError:
     print("Error: 'pyserial' is not installed. Run: pip install pyserial")
     sys.exit(1)
 
+
 def find_arduino_port():
     ports = list(serial.tools.list_ports.comports())
     if not ports:
@@ -20,107 +21,158 @@ def find_arduino_port():
             return p.device
     return ports[0].device
 
-def wait_for_arduino(ser, target_phrase=None, timeout=25):
-    """Reads Arduino output line by line until target_phrase is found or timeout occurs."""
+
+def parse_ir_line(line):
+    lower = line.strip().lower()
+    if not lower:
+        return None
+    if (
+        lower == "0"
+        or lower.startswith("0 ")
+        or lower.startswith("0\t")
+        or "not blocked" in lower
+        or "beam intact" in lower
+        or "path clear" in lower
+        or "relay open" in lower
+    ):
+        return False
+    if (
+        lower == "1"
+        or lower.startswith("1 ")
+        or lower.startswith("1\t")
+        or "(blocked" in lower
+        or lower == "blocked"
+        or "beam broken" in lower
+        or "obstacle detected" in lower
+        or "relay closed" in lower
+    ):
+        return True
+    return None
+
+
+def poll_serial(ser, ir_state):
+    lines = []
+    while ser.in_waiting > 0:
+        line = ser.readline().decode(errors="ignore").strip()
+        if not line:
+            continue
+        lines.append(line)
+        ir_val = parse_ir_line(line)
+        if ir_val is not None:
+            ir_state["blocked"] = ir_val
+        print(f"[Arduino]: {line}")
+    return lines
+
+
+def stop_motor(ser):
+    ser.write(b"S")
+    ser.flush()
+    print("[SAFETY] Obstruction detected -> Motor STOPPED ('S')!")
+
+
+def wait_for_reply(ser, ir_state, target_phrase, timeout=6, stop_on_obstruction=True):
     start = time.time()
     while time.time() - start < timeout:
-        if ser.in_waiting > 0:
-            line = ser.readline().decode(errors="ignore").strip()
-            if line:
-                print(f"[Arduino]: {line}")
-                if target_phrase and target_phrase.lower() in line.lower():
-                    return True
+        for line in poll_serial(ser, ir_state):
+            lower = line.lower()
+            if "motor stopped!" in lower or "safety lock" in lower or "emergency safety" in lower:
+                return False
+            if target_phrase.lower() in lower:
+                return True
+        if stop_on_obstruction and ir_state["blocked"]:
+            stop_motor(ser)
+            return False
         time.sleep(0.05)
     return False
 
-def open_gate(ser):
-    """Sends OPEN command ('O') and waits until gate has opened."""
-    print("\n[ACTION] Sending command 'O' -> Opening Gate...")
-    ser.write(b'O')
-    wait_for_arduino(ser, target_phrase="Gate Open!", timeout=22)
-    print("[STATUS] Gate has reached OPEN position.")
 
-def close_gate(ser):
-    """Sends CLOSE command ('C') and waits until gate has safely closed."""
-    print("\n[ACTION] Sending command 'C' -> Closing Gate...")
-    ser.write(b'C')
-    wait_for_arduino(ser, target_phrase="Gate Closed!", timeout=25)
-    print("[STATUS] Gate has reached CLOSED position. (Gate is safely closed)")
+def run_ir_sensor_test(ser, ir_state):
+    print("\n--- IR SENSOR + MOTOR TEST ---")
+    print(" Obstruction (1) -> STOP MOTOR immediately ('S')")
+    print(" Clear (0)       -> CLOSE ('C')")
+    print(" Press Ctrl+C to return to menu.\n")
 
-def run_test_cycle(ser, pause_seconds=3):
-    """Performs full test: opens gate, pauses, and always closes the gate."""
-    print("\n==============================================")
-    print("   RUNNING BARRIER GATE SELF-TEST CYCLE")
-    print("==============================================")
-    print("--> Step 1/2: Testing OPEN operation...")
-    open_gate(ser)
+    was_blocked = None
 
-    print(f"\n--> Gate is OPEN. Holding for {pause_seconds}s before closing...")
-    time.sleep(pause_seconds)
+    poll_serial(ser, ir_state)
+    print(f"[IR STATUS]: {'BLOCKED (1)' if ir_state['blocked'] else 'CLEAR (0)'}")
 
-    print("\n--> Step 2/2: Testing CLOSE operation (ensuring closed state)...")
-    close_gate(ser)
-    print("\n>>> Self-test completed successfully! Gate is safely CLOSED. <<<\n")
+    try:
+        while True:
+            poll_serial(ser, ir_state)
+
+            if ir_state["blocked"]:
+                if was_blocked is not True:
+                    stop_motor(ser)
+                    was_blocked = True
+            else:
+                if was_blocked is True:
+                    print("[IR -> MOTOR] Path clear (0)! Sending 'C' -> CLOSE...")
+                    ser.write(b"C")
+                    ser.flush()
+                    wait_for_reply(ser, ir_state, "Gate Closed!", stop_on_obstruction=True)
+                    was_blocked = False
+                elif was_blocked is None:
+                    print("[IR STATUS]: CLEAR (0) - Path is clear.")
+                    was_blocked = False
+
+            time.sleep(0.05)
+    except KeyboardInterrupt:
+        print("\nStopped IR Sensor Test. Returning to menu...")
+
 
 def main():
     port = os.environ.get("SERIAL_PORT") or find_arduino_port() or "COM5"
-    print(f"\n==========================================")
-    print(f"   BTS7960 Motor Gate Test & Controller")
-    print(f"==========================================")
     print(f"Connecting to Arduino on {port}...")
 
     try:
         ser = serial.Serial(port, 9600, timeout=1)
-        time.sleep(2)  # Wait for Arduino reset after connection
-        print("Connected successfully!\n")
+        time.sleep(2)
+        print("Connected!\n")
     except Exception as e:
         print(f"Error opening port {port}: {e}")
-        print("Make sure no other program (like lpr_gate_controller.py or Serial Monitor) is using this port.")
         sys.exit(1)
 
-    # Read initial startup text from Arduino
-    while ser.in_waiting > 0:
-        line = ser.readline().decode(errors="ignore").strip()
-        if line:
-            print(f"[Arduino]: {line}")
+    ir_state = {"blocked": False}
+    poll_serial(ser, ir_state)
 
-    # 1. Startup Test: Test Open and Close before starting manual controls
-    print("\n[STARTUP] Running initial test: Testing OPEN and CLOSE of barrier gate...")
-    run_test_cycle(ser, pause_seconds=3)
-
-    print("\n--- BARRIER GATE CONTROLS ---")
-    print(" [T] -> Run Test Cycle (Open -> Pause 3s -> Close)")
-    print(" [O] -> OPEN Gate")
-    print(" [C] -> CLOSE Gate")
-    print(" [Q] -> Quit (Always closes gate before exiting)")
-    print("-----------------------------")
+    print("--- MOTOR & IR TEST ---")
+    print(" [O] - OPEN")
+    print(" [C] - CLOSE")
+    print(" [S] - STOP MOTOR")
+    print(" [I] - IR SENSOR TEST (Obstruction -> Stop Motor, Clear -> Close)")
+    print(" [Q] - QUIT")
+    print("-----------------------")
 
     try:
         while True:
-            cmd = input("\nEnter command (T/O/C/Q): ").strip().upper()
-            if cmd == 'Q':
-                print("Exiting...")
+            cmd = input("\nEnter command (O/C/S/I/Q): ").strip().upper()
+            if cmd == "O":
+                print("Sending 'O' -> OPEN...")
+                ser.write(b"O")
+                ser.flush()
+                wait_for_reply(ser, ir_state, "Gate Open!", stop_on_obstruction=True)
+            elif cmd == "C":
+                print("Sending 'C' -> CLOSE...")
+                ser.write(b"C")
+                ser.flush()
+                wait_for_reply(ser, ir_state, "Gate Closed!", stop_on_obstruction=True)
+            elif cmd == "S":
+                ser.write(b"S")
+                ser.flush()
+                print("Sent 'S' -> STOP MOTOR.")
+            elif cmd == "I":
+                run_ir_sensor_test(ser, ir_state)
+            elif cmd == "Q":
                 break
-            elif cmd == 'T':
-                run_test_cycle(ser, pause_seconds=3)
-            elif cmd == 'O':
-                open_gate(ser)
-            elif cmd == 'C':
-                close_gate(ser)
             else:
-                print("Invalid input. Please enter 'T' to Test, 'O' to Open, 'C' to Close, or 'Q' to quit.")
+                print("Invalid input. Press 'O' (OPEN), 'C' (CLOSE), 'S' (STOP), 'I' (IR TEST), or 'Q' (QUIT).")
     except KeyboardInterrupt:
-        print("\nStopping...")
+        print("\nExiting...")
     finally:
-        # ALWAYS ensure the gate is closed before leaving
-        print("\n[SAFETY] Always ensuring gate is CLOSED before exiting/ready...")
-        try:
-            close_gate(ser)
-        except Exception as e:
-            print(f"Warning during exit close: {e}")
         ser.close()
-        print("Serial port closed. Done!")
+        print("Serial port closed.")
+
 
 if __name__ == "__main__":
     main()
-

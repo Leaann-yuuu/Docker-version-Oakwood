@@ -487,7 +487,7 @@ const AdminDashboard = () => {
               directStreamUrl={
                 overviewData?.entrance_camera_stream_url ||
                 overviewData?.camera_stream_url ||
-                "rtsp://Capstonecamera:Capstonecamera@192.168.86.38:554/stream1"
+                "rtsp://Cameraentrance:Cameraentrance@192.168.254.200:554/stream1"
               }
               cameraStatus={
                 overviewData?.entrance_camera_status ??
@@ -509,7 +509,7 @@ const AdminDashboard = () => {
               streamUrl={resolveExitStreamUrl(overviewData)}
               directStreamUrl={
                 overviewData?.exit_camera_stream_url ||
-                "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.1.63:554/stream2"
+                "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.254.122:554/stream1"
               }
               cameraStatus={
                 overviewData?.exit_camera_status ??

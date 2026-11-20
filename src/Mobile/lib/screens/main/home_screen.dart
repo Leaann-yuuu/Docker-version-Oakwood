@@ -326,19 +326,20 @@ class _InfoTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final Color iconColor;
+  final Color? iconColor;
   final Widget? trailing;
 
   const _InfoTile({
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.iconColor = AppColors.primary,
+    this.iconColor,
     this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveIconColor = iconColor ?? AppColors.primary;
     return Container(
       margin: EdgeInsets.only(bottom: 10.h),
       decoration: BoxDecoration(
@@ -362,10 +363,10 @@ class _InfoTile extends StatelessWidget {
           width: 40.r,
           height: 40.r,
           decoration: BoxDecoration(
-            color: iconColor.withAlpha(22),
+            color: effectiveIconColor.withAlpha(22),
             borderRadius: BorderRadius.circular(10.r),
           ),
-          child: Icon(icon, color: iconColor, size: 20),
+          child: Icon(icon, color: effectiveIconColor, size: 20),
         ),
         title: Text(
           title,

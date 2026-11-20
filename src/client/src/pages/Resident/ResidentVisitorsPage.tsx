@@ -583,15 +583,17 @@ export default function ResidentVisitorsPage() {
                       required
                       value={form.vehicle_type}
                       onChange={(e) => setForm({ ...form, vehicle_type: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs outline-none focus:ring-1 focus:ring-emerald-500 ${
+                        !form.vehicle_type ? "text-zinc-400 dark:text-zinc-400" : "text-zinc-900 dark:text-white font-medium"
+                      }`}
                     >
-                      <option value="" disabled>Select vehicle type</option>
-                      <option value="Sedan">Sedan</option>
-                      <option value="SUV">SUV</option>
-                      <option value="Van">Van</option>
-                      <option value="Pickup">Pickup Truck</option>
-                      <option value="Motorcycle">Motorcycle</option>
-                      <option value="Other">Other</option>
+                      <option value="" disabled className="text-zinc-400 dark:text-zinc-500 bg-white dark:bg-zinc-800">Select vehicle type</option>
+                      <option value="Sedan" className="text-zinc-900 dark:text-white bg-white dark:bg-zinc-800">Sedan</option>
+                      <option value="SUV" className="text-zinc-900 dark:text-white bg-white dark:bg-zinc-800">SUV</option>
+                      <option value="Van" className="text-zinc-900 dark:text-white bg-white dark:bg-zinc-800">Van</option>
+                      <option value="Pickup" className="text-zinc-900 dark:text-white bg-white dark:bg-zinc-800">Pickup Truck</option>
+                      <option value="Motorcycle" className="text-zinc-900 dark:text-white bg-white dark:bg-zinc-800">Motorcycle</option>
+                      <option value="Other" className="text-zinc-900 dark:text-white bg-white dark:bg-zinc-800">Other</option>
                     </select>
                   </div>
                 </div>
@@ -635,85 +637,85 @@ export default function ResidentVisitorsPage() {
       {selectedRequest &&
         createPortal(
           <div
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/70 backdrop-blur-sm animate-modal-backdrop-in"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto bg-black/75 backdrop-blur-sm animate-modal-backdrop-in"
             onClick={() => setSelectedRequest(null)}
           >
             <div
-              className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-2xl text-zinc-900 dark:text-zinc-100 my-auto animate-modal-panel-in"
+              className="relative w-full max-w-2xl lg:max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 shadow-2xl text-zinc-900 dark:text-zinc-100 my-auto animate-modal-panel-in"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4 mb-4">
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4 mb-5">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                  <span className="text-xs font-black uppercase tracking-wider text-zinc-400">
                     Digital Pass &bull; #{selectedRequest.request_id}
                   </span>
-                  <h3 className="text-xl font-black text-zinc-900 dark:text-white">
+                  <h3 className="text-2xl sm:text-3xl font-black text-zinc-900 dark:text-white mt-1">
                     {selectedRequest.visitor?.full_name}
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedRequest(null)}
-                  className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition text-base font-bold cursor-pointer"
+                  className="w-10 h-10 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition text-xl font-bold cursor-pointer"
                   aria-label="Close pass view"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="space-y-4 text-xs">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700">
-                  <span className="font-bold text-zinc-500">Current Status</span>
+              <div className="space-y-5 text-sm">
+                <div className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700">
+                  <span className="text-xs sm:text-sm font-bold text-zinc-500 uppercase tracking-wider">Current Status</span>
                   <ResidentStatusBadge status={selectedRequest.status} />
                 </div>
 
-                <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-700 p-3.5 space-y-2">
-                  <h4 className="font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider text-[11px]">
+                <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-700 p-4 sm:p-5 space-y-3">
+                  <h4 className="font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider text-xs sm:text-sm">
                     Pass Information
                   </h4>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <span className="text-zinc-400">Date of Visit:</span>{" "}
-                      <span className="font-bold">{selectedRequest.visit_date}</span>
+                      <span className="text-zinc-400 text-xs sm:text-sm font-medium">Date of Visit:</span>{" "}
+                      <span className="font-bold text-sm sm:text-base text-zinc-900 dark:text-white block sm:inline">{selectedRequest.visit_date}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400">Time:</span>{" "}
-                      <span className="font-bold">{formatTimeDisplay(selectedRequest.visit_time)}</span>
+                      <span className="text-zinc-400 text-xs sm:text-sm font-medium">Time:</span>{" "}
+                      <span className="font-bold text-sm sm:text-base text-zinc-900 dark:text-white block sm:inline">{formatTimeDisplay(selectedRequest.visit_time)}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400">Visitor Contact:</span>{" "}
-                      <span className="font-semibold">{selectedRequest.visitor?.contact_number}</span>
+                      <span className="text-zinc-400 text-xs sm:text-sm font-medium">Visitor Contact:</span>{" "}
+                      <span className="font-semibold text-sm sm:text-base text-zinc-800 dark:text-zinc-200 block sm:inline">{selectedRequest.visitor?.contact_number}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-400">Plate Number:</span>{" "}
-                      <span className="font-mono font-bold">{selectedRequest.visitor?.vehicle_plate || "None"}</span>
+                      <span className="text-zinc-400 text-xs sm:text-sm font-medium">Plate Number:</span>{" "}
+                      <span className="font-mono font-black text-sm sm:text-base text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg border border-zinc-300 dark:border-zinc-700 inline-block">{selectedRequest.visitor?.vehicle_plate || "None"}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-700 p-3.5 space-y-1">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase">Purpose of Visit</p>
-                  <p className="font-semibold text-zinc-900 dark:text-white">{selectedRequest.purpose}</p>
+                <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-700 p-4 sm:p-5 space-y-2.5">
+                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Purpose of Visit</p>
+                  <p className="font-bold text-sm sm:text-base text-zinc-900 dark:text-white">{selectedRequest.purpose}</p>
                   {selectedRequest.notes && (
-                    <p className="text-zinc-500 pt-1">Notes: {selectedRequest.notes}</p>
+                    <p className="text-sm text-zinc-500 pt-1">Notes: {selectedRequest.notes}</p>
                   )}
                   {selectedRequest.guard_remarks && (
-                    <p className="text-zinc-500 pt-1">Security Officer Remarks: {selectedRequest.guard_remarks}</p>
+                    <p className="text-sm text-zinc-500 pt-1">Security Officer Remarks: {selectedRequest.guard_remarks}</p>
                   )}
                 </div>
 
                 {/* If walkin is pending confirmation */}
                 {selectedRequest.requested_by === "guard" && selectedRequest.status === "PENDING" && (
-                  <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 space-y-3">
-                    <p className="font-black text-rose-800 dark:text-rose-300">
+                  <div className="p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 space-y-3.5">
+                    <p className="font-black text-sm text-rose-800 dark:text-rose-300">
                       Visitor is at the gate. Confirm or reject access:
                     </p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 pt-1">
                       <button
                         type="button"
                         disabled={actionLoading}
                         onClick={() => void handleWalkinResponse(selectedRequest.request_id, "REJECT")}
-                        className="py-2.5 px-4 rounded-xl border border-rose-400 bg-white dark:bg-zinc-900 text-rose-700 dark:text-rose-300 font-bold text-xs cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-900/30 transition"
+                        className="py-3 px-5 rounded-xl border border-rose-400 bg-white dark:bg-zinc-900 text-rose-700 dark:text-rose-300 font-bold text-sm cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-900/30 transition shadow-xs"
                       >
                         Reject
                       </button>
@@ -721,7 +723,7 @@ export default function ResidentVisitorsPage() {
                         type="button"
                         disabled={actionLoading}
                         onClick={() => void handleWalkinResponse(selectedRequest.request_id, "CONFIRM")}
-                        className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-xs cursor-pointer transition"
+                        className="py-3 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm shadow-xs cursor-pointer transition"
                       >
                         Confirm
                       </button>
@@ -729,11 +731,11 @@ export default function ResidentVisitorsPage() {
                   </div>
                 )}
 
-                <div className="pt-2 flex justify-end">
+                <div className="pt-3 flex justify-end border-t border-zinc-200 dark:border-zinc-800">
                   <button
                     type="button"
                     onClick={() => setSelectedRequest(null)}
-                    className="py-2 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                    className="py-2.5 px-6 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-sm font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
                   >
                     Close
                   </button>

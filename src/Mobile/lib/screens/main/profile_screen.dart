@@ -266,14 +266,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 margin: EdgeInsets.only(bottom: 16.h),
                 padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 11.h),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.primary.withValues(alpha: 0.12)
-                      : AppColors.primarySubtle,
+                  color: AppColors.palette.notifUnreadBg,
                   borderRadius: BorderRadius.circular(14.r),
                   border: Border.all(
-                    color: isDark
-                        ? AppColors.primary.withValues(alpha: 0.38)
-                        : AppColors.primary.withValues(alpha: 0.25),
+                    color: AppColors.palette.notifUnreadBorder,
                   ),
                 ),
                 child: Row(
@@ -281,14 +277,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.primary.withValues(alpha: 0.25)
-                            : AppColors.primaryLight,
+                        color: AppColors.palette.notifIconBg,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.visibility_outlined,
-                        color: isDark ? const Color(0xFF4ADE80) : AppColors.primary,
+                        color: AppColors.palette.notifIconColor,
                         size: 16,
                       ),
                     ),
@@ -298,9 +292,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         'Your resident information is view-only. Only administrators can edit your profile details.',
                         style: TextStyle(
                           fontSize: 12.sp,
-                          color: isDark
-                              ? const Color(0xFFCBD5E1)
-                              : AppColors.textSecondary,
+                          color: AppColors.textSecondary,
                           height: 1.35,
                         ),
                       ),
@@ -353,7 +345,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   // ── Profile Banner ───────────────────────────────────────────────────────
   Widget _buildProfileBanner(User user, {required bool isAdmin}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = AppColors.palette;
+    final isDark = p.isDark;
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
@@ -390,9 +383,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppColors.primaryDark.withValues(alpha: 0.88),
-                        AppColors.primary.withValues(alpha: 0.5),
-                        AppColors.primaryDark.withValues(alpha: 0.92),
+                        p.heroFrom.withValues(alpha: 0.90),
+                        p.heroTo.withValues(alpha: 0.78),
+                        p.heroFrom.withValues(alpha: 0.94),
                       ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
@@ -472,9 +465,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 ),
                               ),
                               SizedBox(width: 6.w),
-                              const Icon(
+                              Icon(
                                 Icons.verified_rounded,
-                                color: AppColors.primary,
+                                color: p.accent,
                                 size: 20,
                               ),
                             ],
@@ -580,22 +573,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         Container(
                           padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
                           decoration: BoxDecoration(
-                            color: isDark
-                                ? AppColors.primary.withValues(alpha: 0.20)
-                                : AppColors.primaryLight,
+                            color: p.accentSoft,
                             borderRadius: BorderRadius.circular(12.r),
-                            border: Border.all(
-                              color: isDark
-                                  ? AppColors.primary.withValues(alpha: 0.45)
-                                  : Colors.transparent,
-                            ),
                           ),
                           child: Text(
                             isAdmin ? 'Administrator' : 'Resident Member',
                             style: TextStyle(
                               fontSize: 11.sp,
                               fontWeight: FontWeight.w700,
-                              color: isDark ? const Color(0xFF86EFAC) : AppColors.primaryDark,
+                              color: p.accentText,
                             ),
                           ),
                         ),
@@ -603,7 +589,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           '·',
                           style: TextStyle(
                             fontSize: 12.sp,
-                            color: isDark ? const Color(0xFF64748B) : AppColors.textMuted,
+                            color: p.textMuted,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -614,7 +600,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               width: 7.r,
                               height: 7.r,
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF4ADE80) : AppColors.primary,
+                                color: p.authorizedPillText,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -624,7 +610,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               style: TextStyle(
                                 fontSize: 10.5.sp,
                                 fontWeight: FontWeight.w700,
-                                color: isDark ? const Color(0xFF4ADE80) : AppColors.primary,
+                                color: p.authorizedPillText,
                                 letterSpacing: 0.3,
                               ),
                             ),
@@ -698,9 +684,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 height: 108.r,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primaryDark,
+                  color: p.avatarBg,
                   border: Border.all(
-                    color: isDark ? const Color(0xFF262626) : Colors.white,
+                    color: p.bgCard,
                     width: 4.5.r,
                   ),
                   boxShadow: [
@@ -939,14 +925,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             width: double.infinity,
             padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
             decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? AppColors.primary.withValues(alpha: 0.15)
-                  : AppColors.primaryLight.withValues(alpha: 0.5),
+              color: AppColors.palette.authorizedPillBg,
               borderRadius: BorderRadius.circular(14.r),
               border: Border.all(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? AppColors.primary.withValues(alpha: 0.45)
-                    : AppColors.primary.withValues(alpha: 0.35),
+                color: AppColors.palette.authorizedPillText.withValues(alpha: 0.25),
               ),
             ),
             child: Column(
@@ -957,9 +939,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   style: TextStyle(
                     fontSize: 10.sp,
                     fontWeight: FontWeight.w700,
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF86EFAC)
-                        : AppColors.primaryDark,
+                    color: AppColors.palette.authorizedPillText,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -970,9 +950,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       width: 8.r,
                       height: 8.r,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF4ADE80)
-                            : AppColors.primary,
+                        color: AppColors.palette.authorizedPillText,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -982,9 +960,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       style: TextStyle(
                         fontSize: 13.sp,
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF86EFAC)
-                            : AppColors.primaryDark,
+                        color: AppColors.palette.authorizedPillText,
                       ),
                     ),
                   ],
@@ -1114,7 +1090,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _buildAvatarImage(User user) {
     if (_isUploadingAvatar) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
           strokeWidth: 2.5,
           color: AppColors.primary,
@@ -1363,7 +1339,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Personal Details section
-                            const _DialogSectionHeader(
+                            _DialogSectionHeader(
                               label: 'Personal Details',
                               icon: Icons.person_rounded,
                               color: AppColors.primary,
@@ -1411,7 +1387,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog>
                             SizedBox(height: 18.h),
 
                             // Vehicle Details section
-                            const _DialogSectionHeader(
+                            _DialogSectionHeader(
                               label: 'Vehicle Details',
                               icon: Icons.directions_car_rounded,
                               color: AppColors.primary,
@@ -1443,7 +1419,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog>
                             SizedBox(height: 18.h),
 
                             // Account Information section
-                            const _DialogSectionHeader(
+                            _DialogSectionHeader(
                               label: 'Account Information',
                               icon: Icons.shield_rounded,
                               color: AppColors.primary,
@@ -1649,9 +1625,10 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final effectiveIconBg = isDark ? iconColor.withValues(alpha: 0.18) : iconBgColor;
-    final effectiveIconColor = isDark ? const Color(0xFF4ADE80) : iconColor;
+    final p = AppColors.palette;
+    final isDark = p.isDark;
+    final effectiveIconBg = p.accentSoft;
+    final effectiveIconColor = p.accentText;
 
     return Container(
       padding: EdgeInsets.all(18.r),
@@ -1761,22 +1738,20 @@ class _InfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hColor = highlightColor ?? (isDark ? const Color(0xFF4ADE80) : AppColors.primary);
+    final p = AppColors.palette;
+    final hColor = highlightColor ?? p.accentText;
     final displayValue = (value != null && value!.isNotEmpty) ? value! : '—';
 
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
       decoration: BoxDecoration(
-        color: isHighlighted
-            ? hColor.withValues(alpha: isDark ? 0.16 : 0.08)
-            : (isDark ? const Color(0xFF222222) : AppColors.surfaceMuted),
+        color: isHighlighted ? p.accentSoft : p.bgSubtle,
         borderRadius: BorderRadius.circular(14.r),
         border: Border.all(
           color: isHighlighted
-              ? hColor.withValues(alpha: isDark ? 0.5 : 0.4)
-              : (isDark ? const Color(0xFF2E2E2E) : Theme.of(context).dividerColor.withValues(alpha: 0.5)),
+              ? p.accent.withValues(alpha: 0.4)
+              : p.borderSubtle,
         ),
       ),
       child: Column(
@@ -1787,9 +1762,7 @@ class _InfoTile extends StatelessWidget {
             style: TextStyle(
               fontSize: 9.5.sp,
               fontWeight: FontWeight.w700,
-              color: isHighlighted
-                  ? hColor
-                  : (isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary),
+              color: isHighlighted ? hColor : p.textMuted,
               letterSpacing: 0.5,
             ),
           ),
@@ -1800,9 +1773,7 @@ class _InfoTile extends StatelessWidget {
               fontSize: isHighlighted ? 15.sp : 13.5.sp,
               fontWeight: FontWeight.w600,
               fontFamily: isHighlighted ? 'monospace' : null,
-              color: isHighlighted
-                  ? (isDark ? const Color(0xFF86EFAC) : hColor)
-                  : Theme.of(context).colorScheme.onSurface,
+              color: isHighlighted ? hColor : p.textMain,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -1892,7 +1863,7 @@ class _ModalField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12.r),
-              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12.r),

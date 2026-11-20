@@ -43,6 +43,8 @@ class ApiConstants {
   static const String createVisitorRequest = '/visitor/resident-create';
   static String residentRespond(int id) => '/visitor/resident-respond/$id';
   static String residentCancel(int id) => '/visitor/resident-cancel/$id';
+  static String residentExtend(int id) => '/visitor/resident-extend/$id';
+  static String residentDelete(int id) => '/visitor/resident-delete/$id';
 
   // User Endpoints
   static const String users = '/users';

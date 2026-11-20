@@ -96,6 +96,11 @@ class VisitorService {
     }>(`/visitor/guard-requests?${params.toString()}`);
   }
 
+  // Guard/Admin deletes a visitor request record
+  async guardDelete(requestId: number) {
+    return axiosInstance.delete<{ message: string }>(`/visitor/guard-delete/${requestId}`);
+  }
+
   // Guard loads residents list for dropdown
   async loadResidents() {
     return axiosInstance.get<{ residents: ResidentOption[] }>("/visitor/residents");

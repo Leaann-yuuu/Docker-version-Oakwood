@@ -370,7 +370,7 @@ const DashboardPage = () => {
                         label="Entrance Camera"
                         badge="IN"
                         streamUrl={resolveEntranceStreamUrl(data)}
-                        directStreamUrl={data.entrance_camera_stream_url || data.camera_stream_url || "rtsp://Capstonecamera:Capstonecamera@192.168.86.38:554/stream1"}
+                        directStreamUrl={data.entrance_camera_stream_url || data.camera_stream_url || "rtsp://Cameraentrance:Cameraentrance@192.168.254.200:554/stream1"}
                         cameraStatus={data.entrance_camera_status ?? data.camera_status}
                         onSaveStreamUrl={(url) => handleSaveCameraStream("entrance", url)}
                         onStatusChange={(status) => handleCameraStatusChange("entrance", status)}
@@ -386,7 +386,7 @@ const DashboardPage = () => {
                         label="Exit Camera"
                         badge="OUT"
                         streamUrl={resolveExitStreamUrl(data)}
-                        directStreamUrl={data.exit_camera_stream_url || "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.1.63:554/stream2"}
+                        directStreamUrl={data.exit_camera_stream_url || "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.254.122:554/stream1"}
                         cameraStatus={data.exit_camera_status ?? "offline"}
                         onSaveStreamUrl={(url) => handleSaveCameraStream("exit", url)}
                         onStatusChange={(status) => handleCameraStatusChange("exit", status)}
@@ -947,7 +947,7 @@ const CameraConfigureModal = ({
     onSave: (url: string) => Promise<void>;
 }) => {
     const { shouldRender, isAnimatingOut } = useModalAnimation(isOpen);
-    const defaultUrl = location === "exit" ? "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.1.63:554/stream2" : "rtsp://Capstonecamera:Capstonecamera@192.168.86.38:554/stream1";
+    const defaultUrl = location === "exit" ? "rtsp://Capstonecameraexit:Capstonecameraexit@192.168.254.122:554/stream1" : "rtsp://Cameraentrance:Cameraentrance@192.168.254.200:554/stream1";
 
     // Determine the raw stream URL to show in input (empty by default, unless they saved one)
     const [streamUrlInput, setStreamUrlInput] = useState(streamUrl || "");
